@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
+import { ImportModal } from '@/components/import-modal';
 import { api, ApiError } from '@/lib/api';
 import { brl, brDate } from '@/lib/format';
 import { PLATAFORMAS, STATUS, statusLabel } from '@/lib/constants';
@@ -73,6 +74,7 @@ export function ReservasClient() {
   const [filtroImovel, setFiltroImovel] = useState('');
 
   const [modal, setModal] = useState<'reserva' | 'bloqueio' | null>(null);
+  const [importAberto, setImportAberto] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [formR, setFormR] = useState<FormReserva | null>(null);
   const [formB, setFormB] = useState<FormBloqueio | null>(null);
@@ -341,6 +343,12 @@ export function ReservasClient() {
             >
               + Bloqueio
             </button>
+            <button
+              onClick={() => setImportAberto(true)}
+              className="rounded-lg border border-borda-forte px-4 py-2 text-sm font-medium text-tinta hover:bg-areia"
+            >
+              Importar Airbnb / Booking
+            </button>
             {imoveis.length > 1 ? (
               <select
                 value={filtroImovel}
@@ -416,6 +424,13 @@ export function ReservasClient() {
           salvando={salvando}
           onFechar={fechar}
           onSalvar={salvarBloqueio}
+        />
+      ) : null}
+
+      {importAberto ? (
+        <ImportModal
+          onFechar={() => setImportAberto(false)}
+          onConcluido={carregar}
         />
       ) : null}
 
