@@ -40,6 +40,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith('/painel') ||
     path.startsWith('/imoveis') ||
     path.startsWith('/reservas') ||
+    path.startsWith('/agenda') ||
     path.startsWith('/custos');
 
   // Não logado tentando acessar área privada → manda para o login.

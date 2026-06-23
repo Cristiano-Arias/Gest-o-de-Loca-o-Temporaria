@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { api, ApiError } from '@/lib/api';
 import { brl, brDate } from '@/lib/format';
@@ -110,6 +111,24 @@ export function ReservasClient() {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  // Vindo da Agenda como /reservas?edit=<id>: abre o editor da reserva/bloqueio.
+  const router = useRouter();
+  const params = useSearchParams();
+  const [tratouEdit, setTratouEdit] = useState(false);
+  useEffect(() => {
+    if (tratouEdit || carregando) return;
+    const editId = params.get('edit');
+    if (!editId) return;
+    const r = reservas.find((x) => x.id === editId);
+    if (r) {
+      if (r.kind === 'BLOCK') editarBloqueio(r);
+      else editarReserva(r);
+    }
+    setTratouEdit(true);
+    router.replace('/reservas');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregando, reservas, params, tratouEdit]);
 
   // --- listas derivadas ---
 

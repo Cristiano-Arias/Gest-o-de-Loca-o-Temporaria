@@ -8,7 +8,7 @@ const NAV: NavItem[] = [
   { key: 'painel', rotulo: 'Painel', href: '/painel' },
   { key: 'imoveis', rotulo: 'Imóveis', href: '/imoveis' },
   { key: 'reservas', rotulo: 'Reservas', href: '/reservas' },
-  { key: 'agenda', rotulo: 'Agenda' },
+  { key: 'agenda', rotulo: 'Agenda', href: '/agenda' },
   { key: 'custos', rotulo: 'Custos', href: '/custos' },
   { key: 'fixos', rotulo: 'Custos fixos', href: '/custos-fixos' },
   { key: 'plataformas', rotulo: 'Plataformas' },
