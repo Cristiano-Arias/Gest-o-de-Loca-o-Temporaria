@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>C. Arias · Gestão de Temporada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --mar-fundo:#28727c; /* azul-mar profundo */
+    --mar-fundo-2:#1d5a63;
+    --areia:#f6f1e7;      /* areia clara (fundo) */
+    --areia-2:#efe7d7;
+    --superficie:#ffffff;
+    --tinta:#123038;      /* azul-tinta (texto) */
+    --tinta-suave:#4c6a70;
+    --coral:#e07a5f;      /* sol/terracota (acento) */
+    --coral-esc:#c95f44;
+    --verde:#2f9e6f;      /* receita/lucro */
+    --vermelho:#c5503b;   /* custo/negativo */
+    --ambar:#e9a13b;      /* pendente/atenção */
+    --borda:#e4dac6;
+    --borda-forte:#cfc2a6;
+    --sombra:0 1px 2px rgba(18,48,56,.06),0 8px 24px rgba(18,48,56,.06);
+    --raio:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--areia);
+    color:var(--tinta);
+    -webkit-font-smoothing:antialiased;
+    font-size:15px;
+  }
+  h1,h2,h3,.display{font-family:'Fraunces',Georgia,serif;font-weight:600;letter-spacing:-.01em}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:15px}
+  a{color:inherit}
+
+  /* ---------- Layout ---------- */
+  .app{display:flex;min-height:100vh}
+  .sidebar{
+    width:230px;flex-shrink:0;background:var(--mar-fundo);color:#eafcff;
+    padding:22px 16px;display:flex;flex-direction:column;gap:6px;
+    position:sticky;top:0;height:100vh;
+  }
+  .brand{display:flex;align-items:baseline;gap:8px;padding:6px 8px 20px}
+  .brand .logo{font-family:'Fraunces',serif;font-size:25px;font-weight:600;color:#fff}
+  .brand .tag{font-size:11px;color:#a9d6dc;letter-spacing:.08em;text-transform:uppercase}
+  .nav-item{
+    display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:10px;
+    color:#cdeef2;font-weight:500;font-size:14.5px;border:none;background:transparent;width:100%;text-align:left;
+    transition:background .15s,color .15s;
+  }
+  .nav-item svg{width:19px;height:19px;flex-shrink:0;opacity:.9}
+  .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+  .nav-item.ativo{background:var(--coral);color:#fff}
+  .nav-item.ativo svg{opacity:1}
+  .sidebar .rodape{margin-top:auto;font-size:11px;color:#8fc2c9;padding:8px;line-height:1.5}
+  .sidebar .rodape button{color:#bfe3e8;background:none;border:none;text-decoration:underline;padding:0;font-size:11px}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;gap:14px;padding:18px 28px;background:var(--areia);
+    border-bottom:1px solid var(--borda);position:sticky;top:0;z-index:20;flex-wrap:wrap;
+  }
+  .topbar h2{margin:0;font-size:22px}
+  .topbar .sub{color:var(--tinta-suave);font-size:13px;margin-top:2px}
+  .topbar .espaco{flex:1}
+  .filtro-prop{
+    display:flex;align-items:center;gap:8px;background:var(--superficie);
+    border:1px solid var(--borda-forte);border-radius:10px;padding:7px 12px;font-size:14px;
+  }
+  .filtro-prop select{border:none;background:none;font-weight:600;color:var(--tinta);outline:none}
+  .conteudo{padding:24px 28px 90px;max-width:1180px;width:100%}
+
+  /* ---------- Componentes ---------- */
+  .btn{
+    border:none;border-radius:10px;padding:10px 16px;font-weight:600;font-size:14px;
+    display:inline-flex;align-items:center;gap:7px;transition:transform .05s,filter .15s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primario{background:var(--coral);color:#fff}
+  .btn-primario:hover{filter:brightness(1.05)}
+  .btn-sec{background:var(--superficie);color:var(--tinta);border:1px solid var(--borda-forte)}
+  .btn-sec:hover{background:var(--areia-2)}
+  .btn-fantasma{background:transparent;color:var(--tinta-suave);padding:7px 10px}
+  .btn-fantasma:hover{color:var(--tinta);background:var(--areia-2)}
+  .btn-perigo{background:transparent;color:var(--vermelho);border:1px solid #e9c4bd}
+  .btn-perigo:hover{background:#fbeeec}
+  .btn svg{width:16px;height:16px}
+  .btn-sm{padding:6px 10px;font-size:13px}
+
+  .card{background:var(--superficie);border:1px solid var(--borda);border-radius:var(--raio);box-shadow:var(--sombra)}
+  .grid{display:grid;gap:16px}
+
+  /* KPIs */
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(165px,1fr));margin-bottom:18px}
+  .kpi{padding:16px 18px}
+  .kpi .rotulo{font-size:12.5px;color:var(--tinta-suave);font-weight:500;display:flex;align-items:center;gap:6px}
+  .kpi .valor{font-family:'Fraunces',serif;font-size:27px;font-weight:600;margin-top:7px;line-height:1}
+  .kpi .nota{font-size:12px;color:var(--tinta-suave);margin-top:6px}
+  .kpi .valor.pos{color:var(--verde)} .kpi .valor.neg{color:var(--vermelho)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600}
+
+  /* Tabelas */
+  .tabela-wrap{overflow-x:auto;border-radius:var(--raio)}
+  table{width:100%;border-collapse:collapse;font-size:14px;background:var(--superficie)}
+  thead th{
+    text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--tinta-suave);padding:12px 14px;border-bottom:1px solid var(--borda);white-space:nowrap;
+  }
+  tbody td{padding:12px 14px;border-bottom:1px solid var(--areia-2);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fbf8f1}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .acoes-cel{display:flex;gap:4px;justify-content:flex-end}
+
+  /* Cards de imóvel */
+  .imv-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  .imv-card{padding:18px;display:flex;flex-direction:column;gap:6px}
+  .imv-card h3{margin:0;font-size:18px}
+  .imv-card .end{color:var(--tinta-suave);font-size:13px}
+  .imv-card .linha{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;border-top:1px dashed var(--borda);margin-top:6px;padding-top:8px}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tag{background:var(--areia-2);color:var(--tinta-suave);font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px}
+
+  /* Status */
+  .st-CONFIRMADA{background:#dcefe6;color:#1f7a52}
+  .st-PENDENTE{background:#fcf0d8;color:#9a6a13}
+  .st-HOSPEDADO{background:#dbe9ef;color:#1c5e7a}
+  .st-FINALIZADA{background:#e7e2d6;color:#6a6452}
+  .st-CANCELADA{background:#f3dcd7;color:#9c3a28}
+  .st-BLOQUEADA{background:#e4dcef;color:#5b4486}
+  .st-PAGO{background:#dcefe6;color:#1f7a52}
+  .st-ATRASADO{background:#f3dcd7;color:#9c3a28}
+
+  /* Formularios / modal */
+  .overlay{position:fixed;inset:0;background:rgba(18,48,56,.45);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;z-index:100;overflow-y:auto}
+  .modal{background:var(--areia);border-radius:18px;width:100%;max-width:620px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;margin:auto}
+  .modal-cab{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;background:var(--superficie);border-bottom:1px solid var(--borda)}
+  .modal-cab h3{margin:0;font-size:19px}
+  .modal-corpo{padding:20px 22px;max-height:70vh;overflow-y:auto}
+  .modal-rodape{padding:16px 22px;background:var(--superficie);border-top:1px solid var(--borda);display:flex;justify-content:flex-end;gap:10px}
+  .campo{margin-bottom:14px}
+  .campo label{display:block;font-size:13px;font-weight:600;color:var(--tinta);margin-bottom:6px}
+  .campo input,.campo select,.campo textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--borda-forte);border-radius:9px;background:#fff;color:var(--tinta);
+  }
+  .campo input:focus,.campo select:focus,.campo textarea:focus{outline:2px solid var(--mar-fundo);outline-offset:-1px;border-color:var(--mar-fundo)}
+  .campo .ajuda{font-size:12px;color:var(--tinta-suave);margin-top:4px}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+  .form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+  .calc-box{background:#eef6f3;border:1px solid #cfe6dc;border-radius:10px;padding:10px 12px;font-size:13.5px;color:#1f6b4e;margin-bottom:14px}
+  .check-row{display:flex;gap:14px;flex-wrap:wrap}
+  .check-row label{display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px}
+  .check-row input{width:auto}
+  .seg{display:flex;background:var(--areia-2);border-radius:10px;padding:3px;gap:3px;margin-bottom:16px}
+  .seg button{flex:1;border:none;background:none;padding:9px;border-radius:8px;font-weight:600;color:var(--tinta-suave);font-size:14px}
+  .seg button.on{background:#fff;color:var(--tinta);box-shadow:var(--sombra)}
+
+  .secao-tit{display:flex;align-items:center;gap:10px;margin:26px 0 14px}
+  .secao-tit h3{margin:0;font-size:17px}
+  .secao-tit .linha-h{flex:1;height:1px;background:var(--borda)}
+
+  .vazio{text-align:center;padding:48px 20px;color:var(--tinta-suave)}
+  .vazio svg{width:42px;height:42px;opacity:.4;margin-bottom:10px}
+  .vazio h3{margin:0 0 6px;color:var(--tinta)}
+
+  .barra-filtros{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+  .barra-filtros select,.barra-filtros input{padding:8px 11px;border:1px solid var(--borda-forte);border-radius:9px;background:#fff;font-size:13.5px}
+
+  .chart-card{padding:18px}
+  .chart-card h3{margin:0 0 14px;font-size:15px}
+  .chart-box{position:relative;height:240px}
+  .charts-grid{grid-template-columns:1fr 1fr}
+
+  /* Agenda */
+  .cal-cab{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .cal-cab .mes{font-family:'Fraunces',serif;font-size:20px;font-weight:600;min-width:170px;text-transform:capitalize}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  .cal-dow{text-align:center;font-size:11px;font-weight:700;color:var(--tinta-suave);text-transform:uppercase;padding:4px 0}
+  .cal-dia{background:var(--superficie);border:1px solid var(--borda);border-radius:9px;min-height:74px;padding:5px 6px;font-size:12px;position:relative}
+  .cal-dia.fora{background:transparent;border-color:transparent}
+  .cal-dia.hoje{border-color:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+  .cal-dia .dnum{font-weight:700;color:var(--tinta-suave);font-size:11.5px}
+  .cal-dia.hoje .dnum{color:var(--coral)}
+  .cal-ev{margin-top:3px;font-size:10.5px;font-weight:600;padding:2px 5px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .ev-in{background:#dcefe6;color:#1f7a52}
+  .ev-mid{background:#eef6f3;color:#2f9e6f}
+  .ev-block{background:#e4dcef;color:#5b4486}
+  .ev-conf{background:#f3dcd7;color:#9c3a28}
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--tinta-suave);margin-top:12px}
+  .legenda span{display:flex;align-items:center;gap:6px}
+  .legenda i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:13px 20px;border-radius:11px;font-size:14px;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:200;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.erro{background:var(--vermelho)}
+
+  /* Nav mobile */
+  .nav-mobile{display:none}
+  @media(max-width:860px){
+    .sidebar{display:none}
+    .conteudo{padding:16px 14px 92px}
+    .topbar{padding:14px 16px}
+    .topbar h2{font-size:19px}
+    .charts-grid{grid-template-columns:1fr}
+    .form-grid,.form-grid-3{grid-template-columns:1fr}
+    .seg{flex-wrap:wrap}
+    .seg button{flex:1 1 28%;font-size:12.5px;padding:8px 4px}
+    .nav-mobile{
+      display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--mar-fundo);
+      padding:6px 4px env(safe-area-inset-bottom);z-index:50;box-shadow:0 -4px 16px rgba(0,0,0,.15);
+    }
+    .nav-mobile button{flex:1;background:none;border:none;color:#bfe3e8;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 0;font-size:9px;font-weight:600}
+    .nav-mobile button svg{width:19px;height:19px}
+    .nav-mobile button.ativo{color:#fff}
+    .cal-dia{min-height:58px}
+    .modal{max-width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">C. Arias</span></div>
+    <button class="nav-item" data-view="financeiro">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg> Painel</button>
+    <button class="nav-item" data-view="plataformas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg> Plataformas</button>
+    <button class="nav-item" data-view="agenda">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Agenda</button>
+    <button class="nav-item" data-view="reservas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/></svg> Reservas</button>
+    <button class="nav-item" data-view="custos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 010 3h-3a1.5 1.5 0 000 3h4"/></svg> Custos</button>
+    <button class="nav-item" data-view="fixos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg> Custos fixos</button>
+    <button class="nav-item" data-view="imoveis">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg> Imóveis</button>
+    <div class="rodape">
+      Dados salvos neste navegador.<br/>
+      <button id="btn-exemplo">Carregar exemplos</button> ·
+      <button id="btn-limpar">Limpar tudo</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h2 id="titulo">Painel</h2>
+        <div class="sub" id="subtitulo"></div>
+      </div>
+      <div class="espaco"></div>
+      <div class="filtro-prop">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4c6a70" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>
+        <select id="filtro-imovel"><option value="">Todos os imóveis</option></select>
+      </div>
+      <button class="btn btn-primario" id="btn-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg> <span id="btn-add-txt">Novo</span></button>
+    </header>
+    <main class="conteudo" id="conteudo"></main>
+  </div>
+</div>
+
+<nav class="nav-mobile">
+  <button data-view="financeiro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Painel</button>
+  <button data-view="plataformas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/></svg>Plataf.</button>
+  <button data-view="agenda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Agenda</button>
+  <button data-view="reservas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/></svg>Reservas</button>
+  <button data-view="custos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 010 3h-3a1.5 1.5 0 000 3h4"/></svg>Custos</button>
+  <button data-view="fixos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Fixos</button>
+  <button data-view="imoveis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Imóveis</button>
+</nav>
+
+<div id="modal-host"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======================================================================
+   C. Arias — PMS de locação por temporada (Fase 1)
+   Tudo roda no navegador. Persistência via window.storage.
+====================================================================== */
+
+const CATEGORIAS = ['LIMPEZA','CONDOMINIO','IPTU','ENERGIA','AGUA','GAS','INTERNET','MANUTENCAO','COMPRAS','REPOSICAO','LAVANDERIA','TAXAS_BANCARIAS','OUTROS'];
+const CAT_LABEL = {LIMPEZA:'Limpeza',CONDOMINIO:'Condomínio',IPTU:'IPTU',ENERGIA:'Energia',AGUA:'Água',GAS:'Gás',INTERNET:'Internet',MANUTENCAO:'Manutenção',COMPRAS:'Compras',REPOSICAO:'Reposição de itens',LAVANDERIA:'Lavanderia',TAXAS_BANCARIAS:'Taxas bancárias',OUTROS:'Outros'};
+// Categorias tipicamente recorrentes (sugeridas na aba Custos Fixos)
+const CAT_FIXAS = ['CONDOMINIO','IPTU','ENERGIA','AGUA','GAS','INTERNET','OUTROS'];
+const STATUS = ['PENDENTE','CONFIRMADA','HOSPEDADO','FINALIZADA','CANCELADA'];
+const PLATAFORMAS = ['Airbnb','Booking.com','Direto','Outra'];
+const PAGOS = ['PENDENTE','PAGO','ATRASADO'];
+const STORE_KEY = 'mare-pms-v1';
+
+let db = {properties:[],reservations:[],costs:[]};
+let viewAtual = 'financeiro';
+let filtroImovel = '';
+let calRef = new Date(); calRef.setDate(1);
+let chartRefs = [];
+
+/* ---------------- Persistência (funciona online no Claude.ai e localmente) ---------------- */
+async function carregar(){
+  // 1) ambiente Claude.ai (window.storage)
+  try{
+    if(window.storage && window.storage.get){
+      const r = await window.storage.get(STORE_KEY);
+      if(r && r.value){ db = JSON.parse(r.value); return true; }
+    }
+  }catch(e){ /* sem dados aqui */ }
+  // 2) uso local (arquivo aberto no navegador) → localStorage
+  try{
+    const s = localStorage.getItem(STORE_KEY);
+    if(s){ db = JSON.parse(s); return true; }
+  }catch(e){ /* sem dados aqui */ }
+  return false;
+}
+async function salvar(){
+  const json = JSON.stringify(db);
+  try{ if(window.storage && window.storage.set){ await window.storage.set(STORE_KEY, json); } }catch(e){}
+  try{ localStorage.setItem(STORE_KEY, json); }catch(e){}
+}
+
+/* ---------------- Utilidades ---------------- */
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const brl = n => (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const brlc = n => (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
+const pct = n => (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+function d(str){ if(!str) return null; const [y,m,dd]=str.split('-').map(Number); return new Date(y,m-1,dd); }
+function ymd(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+function brDate(str){ if(!str) return '—'; const p=str.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function brDateCurto(str){ const p=str.split('-'); return p[2]+'/'+p[1]; }
+const MESES_ABREV=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function brMesAno(str){ if(!str) return '—'; const p=str.split('-'); return MESES_ABREV[Number(p[1])-1]+'/'+p[0]; }
+function mesAtualYM(){ const h=hoje(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
+function noitesEntre(ci,co){ return Math.round((d(co)-d(ci))/86400000); }
+function hoje(){ const t=new Date(); return new Date(t.getFullYear(),t.getMonth(),t.getDate()); }
+function addDias(dt,n){ const x=new Date(dt); x.setDate(x.getDate()+n); return x; }
+function imovelNome(id){ const p=db.properties.find(x=>x.id===id); return p?p.nome:'—'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function toast(msg,erro){
+  const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show'+(erro?' erro':'');
+  setTimeout(()=>{t.className='toast';},2600);
+}
+
+/* sobreposição de datas (mesma regra do backend): ci1<co2 && co1>ci2 */
+function conflito(propertyId, ci, co, ignoreId){
+  return db.reservations.find(r=>
+    r.propertyId===propertyId && r.id!==ignoreId &&
+    r.status!=='CANCELADA' &&
+    d(r.checkin) < d(co) && d(r.checkout) > d(ci)
+  );
+}
+
+/* ---------------- Navegação ---------------- */
+const TITULOS = {financeiro:'Painel',plataformas:'Plataformas',agenda:'Agenda',reservas:'Reservas',custos:'Custos',fixos:'Custos fixos',imoveis:'Imóveis'};
+const ADD_TXT = {reservas:'Nova reserva',custos:'Novo custo',fixos:'Novo custo fixo',imoveis:'Novo imóvel',agenda:'Nova reserva',financeiro:'Nova reserva',plataformas:'Nova reserva'};
+
+function irPara(v){
+  viewAtual=v;
+  document.querySelectorAll('.nav-item,[data-view]').forEach(b=>{
+    if(b.dataset && b.dataset.view) b.classList.toggle('ativo', b.dataset.view===v);
+  });
+  document.getElementById('titulo').textContent=TITULOS[v];
+  document.getElementById('btn-add-txt').textContent= ADD_TXT[v]||'Novo';
+  render();
+}
+
+function onAdd(){
+  if(viewAtual==='imoveis') formImovel();
+  else if(viewAtual==='custos') formCusto();
+  else if(viewAtual==='fixos') formFixo();
+  else formReserva();
+}
+
+/* ---------------- Render principal ---------------- */
+function destruirCharts(){ chartRefs.forEach(c=>{try{c.destroy()}catch(e){}}); chartRefs=[]; }
+function preencherFiltro(){
+  const sel=document.getElementById('filtro-imovel');
+  sel.innerHTML='<option value="">Todos os imóveis</option>'+db.properties.map(p=>`<option value="${p.id}" ${p.id===filtroImovel?'selected':''}>${esc(p.nome)}</option>`).join('');
+}
+function render(){
+  destruirCharts();
+  preencherFiltro();
+  const c=document.getElementById('conteudo');
+  const sub=document.getElementById('subtitulo');
+  if(viewAtual==='financeiro'){ sub.textContent='Visão geral de receita, custos e ocupação'; c.innerHTML=viewFinanceiro(); montarCharts(); }
+  else if(viewAtual==='plataformas'){ sub.textContent='KPIs comparativos por canal de venda'; c.innerHTML=viewPlataformas(); montarChartsPlataforma(); }
+  else if(viewAtual==='agenda'){ sub.textContent='Calendário, check-ins e check-outs'; c.innerHTML=viewAgenda(); }
+  else if(viewAtual==='reservas'){ sub.textContent=`${db.reservations.filter(r=>r.kind!=='BLOCK').length} reservas · ${db.reservations.filter(r=>r.kind==='BLOCK').length} bloqueios`; c.innerHTML=viewReservas(); }
+  else if(viewAtual==='custos'){ sub.textContent='Lançamentos e contas a pagar'; c.innerHTML=viewCustos(); }
+  else if(viewAtual==='fixos'){ const t=totalFixosMes(); sub.textContent='Despesas recorrentes · '+brl(t)+'/mês'; c.innerHTML=viewFixos(); }
+  else if(viewAtual==='imoveis'){ sub.textContent=`${db.properties.length} imóvel(is) cadastrado(s)`; c.innerHTML=viewImoveis(); }
+}
+
+/* ====================================================================
+   VIEW: IMÓVEIS
+==================================================================== */
+function viewImoveis(){
+  if(!db.properties.length) return vazio('home','Nenhum imóvel ainda','Cadastre seu primeiro imóvel para começar.','Novo imóvel','formImovel');
+  return `<div class="grid imv-grid">${db.properties.map(p=>{
+    const fixos=(p.custosFixos||[]).reduce((s,x)=>s+Number(x.valor||0),0);
+    return `<div class="card imv-card">
+      <h3>${esc(p.nome)}</h3>
+      <div class="end">${esc(p.endereco)||'Sem endereço'}</div>
+      <div class="tags">${(p.plataformas||[]).map(pl=>`<span class="tag">${esc(pl)}</span>`).join('')||'<span class="tag">Sem plataforma</span>'}</div>
+      <div class="linha"><span>Capacidade</span><strong>${p.capacidade||'—'} hóspedes</strong></div>
+      <div class="linha"><span>Check-in / out</span><strong>${p.checkin||'15:00'} · ${p.checkout||'11:00'}</strong></div>
+      <div class="linha"><span>Taxa de limpeza</span><strong>${brl(p.taxaLimpeza)}</strong></div>
+      <div class="linha"><span>Custos fixos/mês</span><strong>${brl(fixos)}</strong></div>
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <button class="btn btn-sec btn-sm" onclick="formImovel('${p.id}')">Editar</button>
+        <button class="btn btn-fantasma btn-sm" onclick="excluirImovel('${p.id}')">Excluir</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function formImovel(id){
+  const p = id? db.properties.find(x=>x.id===id) : {plataformas:[],custosFixos:[],checkin:'15:00',checkout:'11:00'};
+  const fixosHtml = (cf)=> (cf||[]).map((x,i)=>linhaFixo(x,i)).join('');
+  const corpo=`
+    <div class="campo"><label>Nome do imóvel *</label><input id="f-nome" value="${esc(p.nome)}" placeholder="Ex: Apto Wai Wai Cumbuco"/></div>
+    <div class="campo"><label>Endereço</label><input id="f-end" value="${esc(p.endereco)}" placeholder="Rua, número, cidade"/></div>
+    <div class="form-grid-3">
+      <div class="campo"><label>Capacidade</label><input id="f-cap" type="number" min="1" value="${p.capacidade||2}"/></div>
+      <div class="campo"><label>Check-in</label><input id="f-ci" type="time" value="${p.checkin||'15:00'}"/></div>
+      <div class="campo"><label>Check-out</label><input id="f-co" type="time" value="${p.checkout||'11:00'}"/></div>
+    </div>
+    <div class="campo"><label>Taxa de limpeza (R$)</label><input id="f-limp" type="number" step="0.01" value="${p.taxaLimpeza||''}" placeholder="0,00"/></div>
+    <div class="campo"><label>Plataformas</label>
+      <div class="check-row">${PLATAFORMAS.map(pl=>`<label><input type="checkbox" class="f-plat" value="${pl}" ${(p.plataformas||[]).includes(pl)?'checked':''}/> ${pl}</label>`).join('')}</div>
+    </div>
+    <div class="campo"><label>Custos fixos mensais</label>
+      <div id="fixos-lista">${fixosHtml(p.custosFixos)}</div>
+      <button type="button" class="btn btn-sec btn-sm" style="margin-top:8px" onclick="addLinhaFixo()">+ Adicionar custo fixo</button>
+      <div class="ajuda">Condomínio, IPTU, energia, gás, internet… também podem ser gerenciados na aba “Custos fixos”.</div>
+    </div>
+    <div class="campo"><label>Observações operacionais</label><textarea id="f-obs" rows="2" placeholder="Senha do portão, instruções de limpeza...">${esc(p.obs)}</textarea></div>`;
+  abrirModal(id?'Editar imóvel':'Novo imóvel', corpo, ()=>{
+    const nome=val('f-nome').trim();
+    if(!nome) return toast('Informe o nome do imóvel',true);
+    const fixos=[...document.querySelectorAll('#fixos-lista .linha-fixo')].map(el=>({
+      id:el.dataset.id||uid(), categoria:el.querySelector('.lf-cat').value, valor:Number(el.querySelector('.lf-val').value)||0
+    })).filter(x=>x.valor>0);
+    const obj={
+      id:id||uid(), nome, endereco:val('f-end').trim(), capacidade:Number(val('f-cap'))||2,
+      checkin:val('f-ci'), checkout:val('f-co'), taxaLimpeza:Number(val('f-limp'))||0,
+      plataformas:[...document.querySelectorAll('.f-plat:checked')].map(x=>x.value),
+      custosFixos:fixos, obs:val('f-obs').trim()
+    };
+    if(id){ const i=db.properties.findIndex(x=>x.id===id); db.properties[i]=obj; } else db.properties.push(obj);
+    salvar(); fecharModal(); render(); toast(id?'Imóvel atualizado':'Imóvel cadastrado');
+  });
+}
+function linhaFixo(x,i){
+  return `<div class="linha-fixo" data-id="${x&&x.id?x.id:''}" style="display:grid;grid-template-columns:1.6fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center">
+    <select class="lf-cat">${CATEGORIAS.map(c=>`<option value="${c}" ${x&&x.categoria===c?'selected':''}>${CAT_LABEL[c]}</option>`).join('')}</select>
+    <input class="lf-val" type="number" step="0.01" placeholder="Valor mensal" value="${x?x.valor:''}"/>
+    <button type="button" class="btn btn-fantasma btn-sm" onclick="this.parentElement.remove()">✕</button>
+  </div>`;
+}
+function addLinhaFixo(){ const w=document.createElement('div'); w.innerHTML=linhaFixo(null); document.getElementById('fixos-lista').appendChild(w.firstElementChild); }
+function excluirImovel(id){
+  const temReservas=db.reservations.some(r=>r.propertyId===id);
+  confirmar(`Excluir “${imovelNome(id)}”?`, temReservas?'Há reservas/custos vinculados que também serão removidos.':'Esta ação não pode ser desfeita.', ()=>{
+    db.properties=db.properties.filter(x=>x.id!==id);
+    db.reservations=db.reservations.filter(r=>r.propertyId!==id);
+    db.costs=db.costs.filter(c=>c.propertyId!==id);
+    if(filtroImovel===id) filtroImovel='';
+    salvar(); render(); toast('Imóvel excluído');
+  });
+}
+
+/* ====================================================================
+   VIEW: RESERVAS
+==================================================================== */
+function viewReservas(){
+  if(!db.properties.length) return vazio('list','Cadastre um imóvel primeiro','As reservas precisam estar ligadas a um imóvel.','Ir para Imóveis',"irPara('imoveis')",true);
+  let lista=db.reservations.slice();
+  if(filtroImovel) lista=lista.filter(r=>r.propertyId===filtroImovel);
+  lista.sort((a,b)=> d(b.checkin)-d(a.checkin));
+
+  const barra=`<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-primario btn-sm" onclick="formReserva()">+ Reserva</button>
+      <button class="btn btn-sec btn-sm" onclick="formBloqueio()">+ Bloqueio</button>
+      <button class="btn btn-sec btn-sm" onclick="openImportModal()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg> Importar Airbnb / Booking</button>
+    </div>`;
+
+  if(!lista.length) return barra+vazio('list','Nenhuma reserva ainda','Lance manualmente ou importe os relatórios do Airbnb e Booking.','Nova reserva','formReserva');
+  const linhas=lista.map(r=>{
+    if(r.kind==='BLOCK'){
+      return `<tr>
+        <td><span class="pill st-BLOQUEADA">Bloqueio</span></td>
+        <td>${esc(imovelNome(r.propertyId))}<div style="font-size:12px;color:var(--tinta-suave)">${esc(r.motivo)||'Manutenção'}</div></td>
+        <td>${brDate(r.checkin)} → ${brDate(r.checkout)}<div style="font-size:12px;color:var(--tinta-suave)">${r.noites} noite(s)</div></td>
+        <td>—</td><td class="num">—</td>
+        <td class="acoes-cel">
+          <button class="btn btn-fantasma btn-sm" onclick="formBloqueio('${r.id}')">Editar</button>
+          <button class="btn btn-fantasma btn-sm" onclick="excluirReserva('${r.id}')">✕</button></td></tr>`;
+    }
+    return `<tr>
+      <td><span class="pill st-${r.status}">${r.status.charAt(0)+r.status.slice(1).toLowerCase()}</span><div style="font-size:11.5px;color:var(--tinta-suave);margin-top:3px">${esc(r.plataforma)||'—'}</div></td>
+      <td><strong>${esc(r.hospedeNome)||'Hóspede'}</strong><div style="font-size:12px;color:var(--tinta-suave)">${esc(imovelNome(r.propertyId))}</div></td>
+      <td>${brDate(r.checkin)} → ${brDate(r.checkout)}<div style="font-size:12px;color:var(--tinta-suave)">${r.noites} noite(s) · ${r.hospedes||1} hósp.</div></td>
+      <td>${esc(r.codigo)||'—'}</td>
+      <td class="num"><strong>${brl(r.valorLiquido)}</strong><div style="font-size:11.5px;color:var(--tinta-suave)">bruto ${brl(r.valorBruto)}</div></td>
+      <td class="acoes-cel">
+        <button class="btn btn-fantasma btn-sm" onclick="formReserva('${r.id}')">Editar</button>
+        <button class="btn btn-fantasma btn-sm" onclick="excluirReserva('${r.id}')">✕</button></td></tr>`;
+  }).join('');
+
+  return barra+cardsFuturos()+`<div class="card tabela-wrap"><table>
+      <thead><tr><th>Status</th><th>Hóspede / Imóvel</th><th>Período</th><th>Código</th><th class="num">Valor líquido</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>`;
+}
+function cardsFuturos(){
+  const h=hoje();
+  const fut=db.reservations.filter(r=>r.kind==='BOOKING'&&r.status!=='CANCELADA'&&d(r.checkout)>h);
+  const cards=db.properties.map(p=>{
+    const arr=fut.filter(r=>r.propertyId===p.id);
+    const total=arr.reduce((s,r)=>s+Number(r.valorLiquido||0),0);
+    return kpi('Futuro · '+p.nome, brl(total), arr.length+' reserva(s) · '+arr.reduce((s,r)=>s+(r.noites||0),0)+' noites');
+  }).join('');
+  const totalGeral=fut.reduce((s,r)=>s+Number(r.valorLiquido||0),0);
+  const cardAmbas=kpi('Futuro · Ambas', brl(totalGeral), fut.length+' reserva(s)', 'pos');
+  return `<div class="secao-tit" style="margin-top:0"><h3>Receita futura contratada</h3><div class="linha-h"></div></div>
+    <div class="grid kpis" style="margin-bottom:18px">${cards}${cardAmbas}</div>`;
+}
+function formReserva(id){
+  const r = id? db.reservations.find(x=>x.id===id) : {status:'CONFIRMADA',hospedes:1,plataforma:'Airbnb'};
+  const opImoveis=db.properties.map(p=>`<option value="${p.id}" ${r.propertyId===p.id?'selected':''}>${esc(p.nome)}</option>`).join('');
+  const corpo=`
+    <div class="form-grid">
+      <div class="campo"><label>Imóvel *</label><select id="r-imovel">${opImoveis}</select></div>
+      <div class="campo"><label>Plataforma</label><select id="r-plat">${PLATAFORMAS.map(p=>`<option ${r.plataforma===p?'selected':''}>${p}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-grid">
+      <div class="campo"><label>Hóspede</label><input id="r-hosp" value="${esc(r.hospedeNome)}" placeholder="Nome do hóspede"/></div>
+      <div class="campo"><label>Código da reserva</label><input id="r-cod" value="${esc(r.codigo)}" placeholder="Ex: HMABC123"/></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="campo"><label>Check-in *</label><input id="r-ci" type="date" value="${r.checkin||''}"/></div>
+      <div class="campo"><label>Check-out *</label><input id="r-co" type="date" value="${r.checkout||''}"/></div>
+      <div class="campo"><label>Hóspedes</label><input id="r-num" type="number" min="1" value="${r.hospedes||1}"/></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="campo"><label>Valor bruto (R$)</label><input id="r-bruto" type="number" step="0.01" value="${r.valorBruto||''}" oninput="recalcReserva()"/></div>
+      <div class="campo"><label>Taxa plataforma (R$)</label><input id="r-taxa" type="number" step="0.01" value="${r.taxaPlataforma||''}" oninput="recalcReserva()"/></div>
+      <div class="campo"><label>Taxa limpeza (R$)</label><input id="r-limp" type="number" step="0.01" value="${r.taxaLimpeza||''}"/></div>
+    </div>
+    <div class="calc-box" id="r-calc">Líquido: —</div>
+    <div class="form-grid">
+      <div class="campo"><label>Status</label><select id="r-status">${STATUS.map(s=>`<option ${r.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="campo"><label>Telefone / contato</label><input id="r-tel" value="${esc(r.hospedeTel)}" placeholder="Opcional"/></div>
+    </div>`;
+  abrirModal(id?'Editar reserva':'Nova reserva', corpo, ()=>{
+    const propertyId=val('r-imovel'), ci=val('r-ci'), co=val('r-co');
+    if(!propertyId) return toast('Selecione o imóvel',true);
+    if(!ci||!co) return toast('Informe check-in e check-out',true);
+    if(noitesEntre(ci,co)<=0) return toast('Check-out deve ser depois do check-in',true);
+    const conf=conflito(propertyId,ci,co,id);
+    if(conf) return toast('Conflito de agenda com '+(conf.hospedeNome||'reserva')+' ('+brDateCurto(conf.checkin)+'→'+brDateCurto(conf.checkout)+')',true);
+    const bruto=Number(val('r-bruto'))||0, taxa=Number(val('r-taxa'))||0;
+    const obj={
+      id:id||uid(), kind:'BOOKING', propertyId, plataforma:val('r-plat'),
+      hospedeNome:val('r-hosp').trim(), hospedeTel:val('r-tel').trim(), codigo:val('r-cod').trim(),
+      checkin:ci, checkout:co, noites:noitesEntre(ci,co), hospedes:Number(val('r-num'))||1,
+      valorBruto:bruto, taxaPlataforma:taxa, taxaLimpeza:Number(val('r-limp'))||0,
+      valorLiquido:bruto-taxa, status:val('r-status')
+    };
+    if(id){ const i=db.reservations.findIndex(x=>x.id===id); db.reservations[i]=obj; } else db.reservations.push(obj);
+    salvar(); fecharModal(); render(); toast(id?'Reserva atualizada':'Reserva lançada');
+  });
+  setTimeout(recalcReserva,30);
+}
+function recalcReserva(){
+  const b=Number(val('r-bruto'))||0, t=Number(val('r-taxa'))||0;
+  const el=document.getElementById('r-calc'); if(el) el.innerHTML='Valor líquido (bruto − taxa plataforma): <strong>'+brl(b-t)+'</strong>';
+}
+function formBloqueio(id){
+  const r= id? db.reservations.find(x=>x.id===id):{};
+  const opImoveis=db.properties.map(p=>`<option value="${p.id}" ${r.propertyId===p.id?'selected':''}>${esc(p.nome)}</option>`).join('');
+  const corpo=`
+    <div class="campo"><label>Imóvel *</label><select id="b-imovel">${opImoveis}</select></div>
+    <div class="form-grid">
+      <div class="campo"><label>De *</label><input id="b-ci" type="date" value="${r.checkin||''}"/></div>
+      <div class="campo"><label>Até *</label><input id="b-co" type="date" value="${r.checkout||''}"/></div>
+    </div>
+    <div class="campo"><label>Motivo</label><input id="b-mot" value="${esc(r.motivo)}" placeholder="Manutenção, uso próprio…"/></div>`;
+  abrirModal(id?'Editar bloqueio':'Novo bloqueio', corpo, ()=>{
+    const propertyId=val('b-imovel'), ci=val('b-ci'), co=val('b-co');
+    if(!propertyId||!ci||!co) return toast('Preencha imóvel e datas',true);
+    if(noitesEntre(ci,co)<=0) return toast('Data final deve ser depois da inicial',true);
+    const conf=conflito(propertyId,ci,co,id);
+    if(conf) return toast('Conflito com reserva existente nesse período',true);
+    const obj={id:id||uid(),kind:'BLOCK',propertyId,checkin:ci,checkout:co,noites:noitesEntre(ci,co),motivo:val('b-mot').trim(),status:'BLOQUEADA',valorBruto:0,valorLiquido:0};
+    if(id){const i=db.reservations.findIndex(x=>x.id===id);db.reservations[i]=obj;} else db.reservations.push(obj);
+    salvar(); fecharModal(); render(); toast(id?'Bloqueio atualizado':'Período bloqueado');
+  });
+}
+function excluirReserva(id){
+  const r=db.reservations.find(x=>x.id===id);
+  confirmar('Excluir este '+(r.kind==='BLOCK'?'bloqueio':'registro')+'?','', ()=>{
+    db.reservations=db.reservations.filter(x=>x.id!==id); salvar(); render(); toast('Removido');
+  });
+}
+
+/* ====================================================================
+   IMPORTAÇÃO — relatórios padrão do Airbnb (CSV) e Booking (XLS)
+==================================================================== */
+function parseNumBR(s){
+  if(s==null) return 0;
+  let t=String(s).replace(/\u00a0/g,' ').replace(/R\$/i,'').replace(/BRL/i,'').trim();
+  if(t==='') return 0;
+  if(t.indexOf(',')>-1){ t=t.replace(/\./g,'').replace(',','.'); } // formato brasileiro
+  t=t.replace(/[^0-9.\-]/g,'');
+  return parseFloat(t)||0;
+}
+function parseDataFlex(s){
+  if(s==null||s==='') return null;
+  if(s instanceof Date && !isNaN(s)) return ymd(s);
+  let t=String(s).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10);          // 2026-06-29
+  let m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);                // 23/07/2026
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  if(/^\d+(\.\d+)?$/.test(t)){ const dt=new Date(Date.UTC(1899,11,30)+parseFloat(t)*86400000); return ymd(dt); } // serial Excel
+  return null;
+}
+function statusPorData(raw, ci, co){
+  if(/cancel/i.test(raw||'')) return 'CANCELADA';
+  const h=hoje();
+  if(d(co)<=h) return 'FINALIZADA';
+  if(d(ci)<=h && d(co)>h) return 'HOSPEDADO';
+  return 'CONFIRMADA';
+}
+function mapearImovel(texto){
+  const t=(texto||'').toLowerCase();
+  if(/wai|cumbuco|sea view/.test(t)) return acharOuCriarImovel(['wai','cumbuco'],'Apto Wai Wai Cumbuco');
+  if(/kennedy|studio|one-bedroom|one bedroom|marco|bernardo|sbc/.test(t)) return acharOuCriarImovel(['marco','sbc','bernardo','kennedy'],'Marco Zero SBC');
+  return null;
+}
+function acharOuCriarImovel(keys,nomePadrao){
+  let p=db.properties.find(pp=> keys.some(k=> pp.nome.toLowerCase().includes(k)));
+  if(p) return p.id;
+  const novo={id:uid(),nome:nomePadrao,endereco:'',capacidade:2,checkin:'15:00',checkout:'11:00',taxaLimpeza:0,plataformas:['Airbnb','Booking.com'],custosFixos:[],obs:''};
+  db.properties.push(novo); return novo.id;
+}
+
+function openImportModal(){
+  const host=document.getElementById('modal-host');
+  host.innerHTML=`<div class="overlay" id="ov"><div class="modal">
+    <div class="modal-cab"><h3>Importar reservas</h3><button class="btn btn-fantasma" onclick="fecharModal()">✕</button></div>
+    <div class="modal-corpo">
+      <p style="margin:0 0 14px;color:var(--tinta-suave);font-size:14px">Selecione os relatórios baixados das plataformas. O app detecta sozinho se é Airbnb ou Booking, identifica o imóvel e <strong>não duplica</strong> reservas já importadas (pelo código).</p>
+      <div class="campo">
+        <label>Arquivos (Airbnb .csv e/ou Booking .xls)</label>
+        <input id="imp-file" type="file" accept=".csv,.xls,.xlsx" multiple/>
+        <div class="ajuda">Pode selecionar vários de uma vez. Airbnb = um arquivo com os dois imóveis · Booking = um arquivo por imóvel.</div>
+      </div>
+      <div id="imp-status" style="font-size:13.5px;color:var(--tinta-suave)"></div>
+    </div>
+    <div class="modal-rodape">
+      <button class="btn btn-sec" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primario" id="imp-go">Importar</button>
+    </div>
+  </div></div>`;
+  document.getElementById('ov').addEventListener('mousedown',e=>{ if(e.target.id==='ov') fecharModal(); });
+  document.getElementById('imp-go').onclick=()=>{
+    const inp=document.getElementById('imp-file');
+    if(!inp.files.length){ toast('Selecione ao menos um arquivo',true); return; }
+    if(typeof XLSX==='undefined'){ toast('Biblioteca de leitura não carregou (precisa de internet)',true); return; }
+    document.getElementById('imp-status').textContent='Processando…';
+    importarArquivos(inp.files);
+  };
+}
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,''); // remove BOM
+  const rows=[]; let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else{
+      if(ch==='"') q=true;
+      else if(ch===',') { row.push(cur); cur=''; }
+      else if(ch==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else if(ch==='\r'){ /* ignora */ }
+      else cur+=ch;
+    }
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+function importarArquivos(fileList){
+  const files=[...fileList];
+  const resumo={Airbnb:{nova:0,atu:0},'Booking.com':{nova:0,atu:0},ignoradas:0,erros:[]};
+  let pend=files.length;
+  files.forEach(file=>{
+    const ehCsv=/\.csv$/i.test(file.name);
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        let rows;
+        if(ehCsv){
+          rows=parseCSV(String(e.target.result)); // texto UTF-8, datas preservadas
+        }else{
+          const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); // Booking .xls
+          rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+        }
+        processarLinhas(rows,resumo,file.name);
+      }catch(err){ resumo.erros.push(file.name+': '+err.message); }
+      if(--pend===0) finalizarImport(resumo);
+    };
+    reader.onerror=()=>{ resumo.erros.push(file.name+': falha ao ler o arquivo'); if(--pend===0) finalizarImport(resumo); };
+    if(ehCsv) reader.readAsText(file,'UTF-8'); else reader.readAsArrayBuffer(file);
+  });
+}
+function processarLinhas(rows,resumo,nomeArq){
+  if(!rows||!rows.length){ resumo.erros.push(nomeArq+': vazio'); return; }
+  const head=rows[0].map(x=>String(x).trim());
+  const idx=name=> head.findIndex(h=>h.toLowerCase()===name.toLowerCase());
+  const has=name=> idx(name)>-1;
+  let plat=null;
+  if(has('Código de confirmação')||has('Anúncio')||has('Ganhos')) plat='Airbnb';
+  else if(has('Número da reserva')||has('Tipo de unidade')) plat='Booking.com';
+  if(!plat){ resumo.erros.push(nomeArq+': formato não reconhecido'); return; }
+
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i]; if(!row||row.every(c=>String(c).trim()==='')) continue;
+    const g=name=>{ const j=idx(name); return j>-1?row[j]:''; };
+    let obj;
+    if(plat==='Airbnb'){
+      const ci=parseDataFlex(g('Data de início')), co=parseDataFlex(g('Data de término'));
+      if(!ci||!co){ resumo.ignoradas++; continue; }
+      const ganho=parseNumBR(g('Ganhos'));
+      const propId=mapearImovel(g('Anúncio'));
+      if(!propId){ resumo.ignoradas++; continue; }
+      obj={kind:'BOOKING',plataforma:'Airbnb',codigo:String(g('Código de confirmação')).trim(),
+        hospedeNome:String(g('Nome do hóspede')).trim(),hospedeTel:String(g('Entrar em contato')).trim(),
+        propertyId:propId,checkin:ci,checkout:co,noites:Number(g('Nº de noites'))||noitesEntre(ci,co),
+        hospedes:(Number(g('Nº de adultos'))||0)+(Number(g('Nº de crianças'))||0)+(Number(g('Nº de bebês'))||0)||1,
+        valorBruto:ganho,taxaPlataforma:0,valorLiquido:ganho,status:statusPorData(g('Status'),ci,co)};
+    }else{
+      const ci=parseDataFlex(g('Entrada')), co=parseDataFlex(g('Saída'));
+      if(!ci||!co){ resumo.ignoradas++; continue; }
+      const preco=parseNumBR(g('Preço')), com=parseNumBR(g('Valor da comissão'));
+      const propId=mapearImovel(g('Tipo de unidade'));
+      if(!propId){ resumo.ignoradas++; continue; }
+      obj={kind:'BOOKING',plataforma:'Booking.com',codigo:String(g('Número da reserva')).trim(),
+        hospedeNome:String(g('Nome(s) do(s) hóspede(s)')||g('Reservado por')).trim(),hospedeTel:String(g('Telefone')).trim(),
+        propertyId:propId,checkin:ci,checkout:co,noites:Number(g('Duração (diárias)'))||noitesEntre(ci,co),
+        hospedes:Number(g('Pessoas'))||1,valorBruto:preco,taxaPlataforma:com,valorLiquido:preco-com,
+        status:statusPorData(g('Status'),ci,co)};
+    }
+    const ex=db.reservations.find(r=>r.plataforma===obj.plataforma && r.codigo && r.codigo===obj.codigo);
+    if(ex){ Object.assign(ex,obj,{id:ex.id}); resumo[obj.plataforma].atu++; }
+    else { obj.id=uid(); db.reservations.push(obj); resumo[obj.plataforma].nova++; }
+  }
+}
+function escanearConflitos(){
+  const out=[]; const ativ=db.reservations.filter(r=>r.kind!=='BLOCK'&&r.status!=='CANCELADA');
+  for(let i=0;i<ativ.length;i++) for(let j=i+1;j<ativ.length;j++){
+    const a=ativ[i],b=ativ[j];
+    if(a.propertyId===b.propertyId && d(a.checkin)<d(b.checkout) && d(a.checkout)>d(b.checkin)){
+      out.push(imovelNome(a.propertyId)+': '+(a.hospedeNome||a.plataforma)+' ('+a.plataforma+', '+brDateCurto(a.checkin)+'→'+brDateCurto(a.checkout)+') × '+(b.hospedeNome||b.plataforma)+' ('+b.plataforma+', '+brDateCurto(b.checkin)+'→'+brDateCurto(b.checkout)+')');
+    }
+  }
+  return out;
+}
+function finalizarImport(resumo){
+  salvar();
+  const conflitos=escanearConflitos();
+  const totalNovas=resumo.Airbnb.nova+resumo['Booking.com'].nova;
+  const totalAtu=resumo.Airbnb.atu+resumo['Booking.com'].atu;
+  let html=`<div style="font-size:14px">
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <div class="card kpi" style="flex:1"><div class="rotulo">Importadas</div><div class="valor pos">${totalNovas}</div></div>
+      <div class="card kpi" style="flex:1"><div class="rotulo">Atualizadas</div><div class="valor">${totalAtu}</div></div>
+      <div class="card kpi" style="flex:1"><div class="rotulo">Ignoradas</div><div class="valor">${resumo.ignoradas}</div></div>
+    </div>
+    <table style="width:100%;font-size:13.5px;margin-bottom:8px"><tbody>
+      <tr><td>Airbnb</td><td class="num">${resumo.Airbnb.nova} novas · ${resumo.Airbnb.atu} atualizadas</td></tr>
+      <tr><td>Booking.com</td><td class="num">${resumo['Booking.com'].nova} novas · ${resumo['Booking.com'].atu} atualizadas</td></tr>
+    </tbody></table>`;
+  if(conflitos.length){
+    html+=`<div style="background:#fbeeec;border:1px solid #e9c4bd;border-radius:10px;padding:12px;margin-top:10px">
+      <strong style="color:var(--vermelho)">⚠ ${conflitos.length} conflito(s) de agenda (possível overbooking):</strong>
+      <ul style="margin:8px 0 0;padding-left:18px;color:#9c3a28;font-size:12.5px">${conflitos.slice(0,8).map(c=>`<li>${esc(c)}</li>`).join('')}</ul>
+      ${conflitos.length>8?`<div style="font-size:12px;margin-top:4px">…e mais ${conflitos.length-8}.</div>`:''}
+    </div>`;
+  }
+  if(resumo.erros.length){
+    html+=`<div style="margin-top:10px;font-size:12.5px;color:var(--tinta-suave)">Avisos: ${resumo.erros.map(esc).join(' · ')}</div>`;
+  }
+  html+='</div>';
+  const host=document.getElementById('modal-host');
+  host.innerHTML=`<div class="overlay" id="ov"><div class="modal">
+    <div class="modal-cab"><h3>Importação concluída</h3><button class="btn btn-fantasma" onclick="fecharModal()">✕</button></div>
+    <div class="modal-corpo">${html}</div>
+    <div class="modal-rodape"><button class="btn btn-primario" onclick="fecharModal()">Pronto</button></div>
+  </div></div>`;
+  document.getElementById('ov').addEventListener('mousedown',e=>{ if(e.target.id==='ov') fecharModal(); });
+  render();
+  toast(totalNovas+' reserva(s) importada(s)');
+}
+
+/* ====================================================================
+   VIEW: CUSTOS
+==================================================================== */
+let custoFiltroCat='', custoFiltroPag='';
+function viewCustos(){
+  if(!db.properties.length) return vazio('list','Cadastre um imóvel primeiro','Os custos precisam estar ligados a um imóvel.','Ir para Imóveis',"irPara('imoveis')",true);
+  let lista=db.costs.slice();
+  if(filtroImovel) lista=lista.filter(c=>c.propertyId===filtroImovel);
+  if(custoFiltroCat) lista=lista.filter(c=>c.categoria===custoFiltroCat);
+  if(custoFiltroPag) lista=lista.filter(c=>c.statusPagamento===custoFiltroPag);
+  lista.sort((a,b)=> d(b.data)-d(a.data));
+  const total=lista.reduce((s,c)=>s+Number(c.valor||0),0);
+  const pend=lista.filter(c=>c.statusPagamento!=='PAGO').reduce((s,c)=>s+Number(c.valor||0),0);
+
+  const filtros=`<div class="barra-filtros">
+    <button class="btn btn-primario btn-sm" onclick="formCusto()">+ Custo</button>
+    <button class="btn btn-sec btn-sm" onclick="lancarFixos()">Lançar custos fixos do mês</button>
+    <select onchange="custoFiltroCat=this.value;render()"><option value="">Todas categorias</option>${CATEGORIAS.map(c=>`<option value="${c}" ${custoFiltroCat===c?'selected':''}>${CAT_LABEL[c]}</option>`).join('')}</select>
+    <select onchange="custoFiltroPag=this.value;render()"><option value="">Todo status</option>${PAGOS.map(p=>`<option value="${p}" ${custoFiltroPag===p?'selected':''}>${p.charAt(0)+p.slice(1).toLowerCase()}</option>`).join('')}</select>
+    <span style="margin-left:auto;font-size:13.5px;color:var(--tinta-suave)">Total: <strong style="color:var(--tinta)">${brl(total)}</strong> · A pagar: <strong style="color:var(--vermelho)">${brl(pend)}</strong></span>
+  </div>`;
+
+  if(!lista.length) return filtros+vazio('coin','Nenhum custo lançado','Adicione despesas de limpeza, condomínio, manutenção…','Novo custo','formCusto');
+
+  const linhas=lista.map(c=>`<tr>
+    <td style="text-transform:capitalize">${brMesAno(c.data)}</td>
+    <td><span class="tag">${CAT_LABEL[c.categoria]||c.categoria}</span></td>
+    <td>${esc(imovelNome(c.propertyId))}<div style="font-size:12px;color:var(--tinta-suave)">${esc(c.descricao)||''}</div></td>
+    <td class="num"><strong>${brl(c.valor)}</strong></td>
+    <td><span class="pill st-${c.statusPagamento}">${c.statusPagamento.charAt(0)+c.statusPagamento.slice(1).toLowerCase()}</span></td>
+    <td class="acoes-cel">
+      <button class="btn btn-fantasma btn-sm" onclick="formCusto('${c.id}')">Editar</button>
+      <button class="btn btn-fantasma btn-sm" onclick="excluirCusto('${c.id}')">✕</button></td></tr>`).join('');
+  return filtros+`<div class="card tabela-wrap"><table>
+    <thead><tr><th>Mês</th><th>Categoria</th><th>Imóvel / Descrição</th><th class="num">Valor</th><th>Pagamento</th><th></th></tr></thead>
+    <tbody>${linhas}</tbody></table></div>`;
+}
+function formCusto(id){
+  const c= id? db.costs.find(x=>x.id===id):{data:mesAtualYM()+'-01',categoria:'LIMPEZA',statusPagamento:'PENDENTE',propertyId:filtroImovel||(db.properties[0]&&db.properties[0].id)};
+  const opImoveis=db.properties.map(p=>`<option value="${p.id}" ${c.propertyId===p.id?'selected':''}>${esc(p.nome)}</option>`).join('');
+  const corpo=`
+    <div class="form-grid">
+      <div class="campo"><label>Imóvel *</label><select id="c-imovel">${opImoveis}</select></div>
+      <div class="campo"><label>Mês de referência *</label><input id="c-data" type="month" value="${(c.data||'').slice(0,7)||mesAtualYM()}"/></div>
+    </div>
+    <div class="form-grid">
+      <div class="campo"><label>Categoria *</label><select id="c-cat">${CATEGORIAS.map(k=>`<option value="${k}" ${c.categoria===k?'selected':''}>${CAT_LABEL[k]}</option>`).join('')}</select></div>
+      <div class="campo"><label>Valor (R$) *</label><input id="c-val" type="number" step="0.01" value="${c.valor||''}"/></div>
+    </div>
+    <div class="campo"><label>Descrição</label><input id="c-desc" value="${esc(c.descricao)}" placeholder="Opcional"/></div>
+    <div class="campo"><label>Status de pagamento</label><select id="c-pag">${PAGOS.map(p=>`<option value="${p}" ${c.statusPagamento===p?'selected':''}>${p.charAt(0)+p.slice(1).toLowerCase()}</option>`).join('')}</select></div>`;
+  abrirModal(id?'Editar custo':'Novo custo', corpo, ()=>{
+    const propertyId=val('c-imovel'), valor=Number(val('c-val'))||0;
+    const ym=val('c-data')||mesAtualYM();
+    if(!propertyId) return toast('Selecione o imóvel',true);
+    if(valor<=0) return toast('Informe um valor',true);
+    const obj={id:id||uid(),propertyId,data:ym+'-01',categoria:val('c-cat'),valor,descricao:val('c-desc').trim(),statusPagamento:val('c-pag')};
+    if(id){const i=db.costs.findIndex(x=>x.id===id);db.costs[i]=obj;} else db.costs.push(obj);
+    salvar(); fecharModal(); render(); toast(id?'Custo atualizado':'Custo lançado');
+  });
+}
+function excluirCusto(id){ confirmar('Excluir este custo?','',()=>{db.costs=db.costs.filter(x=>x.id!==id);salvar();render();toast('Custo removido');}); }
+function lancarFixos(){
+  const alvo=filtroImovel? db.properties.filter(p=>p.id===filtroImovel):db.properties;
+  const ym=mesAtualYM(); const data=ym+'-01';
+  let n=0;
+  alvo.forEach(p=>(p.custosFixos||[]).forEach(cf=>{
+    const existe=db.costs.some(c=>c.propertyId===p.id&&c.categoria===cf.categoria&&(c.data||'').slice(0,7)===ym&&c.descricao==='Custo fixo mensal');
+    if(!existe){ db.costs.push({id:uid(),propertyId:p.id,data,categoria:cf.categoria,valor:cf.valor,descricao:'Custo fixo mensal',statusPagamento:'PENDENTE'}); n++; }
+  }));
+  salvar(); render();
+  toast(n? n+' custo(s) fixo(s) lançado(s) neste mês' : 'Custos fixos deste mês já estavam lançados');
+}
+
+/* ====================================================================
+   VIEW: CUSTOS FIXOS (recorrentes)
+==================================================================== */
+function migrarFixos(){
+  db.properties.forEach(p=>{ (p.custosFixos||[]).forEach(cf=>{ if(!cf.id) cf.id=uid(); }); });
+}
+function todosFixos(){
+  const out=[];
+  db.properties.forEach(p=>{
+    if(filtroImovel && p.id!==filtroImovel) return;
+    (p.custosFixos||[]).forEach(cf=> out.push({propId:p.id,propNome:p.nome,id:cf.id,categoria:cf.categoria,valor:Number(cf.valor||0)}));
+  });
+  return out.sort((a,b)=> a.propNome.localeCompare(b.propNome) || a.categoria.localeCompare(b.categoria));
+}
+function totalFixosMes(){ return todosFixos().reduce((s,x)=>s+x.valor,0); }
+function lancadoEsteMes(propId,categoria){
+  const ym=mesAtualYM();
+  return db.costs.some(c=>c.propertyId===propId&&c.categoria===categoria&&(c.data||'').slice(0,7)===ym&&c.descricao==='Custo fixo mensal');
+}
+function viewFixos(){
+  if(!db.properties.length) return vazio('coin','Cadastre um imóvel primeiro','Os custos fixos ficam ligados a cada imóvel.','Ir para Imóveis',"irPara('imoveis')",true);
+  const lista=todosFixos();
+  const total=lista.reduce((s,x)=>s+x.valor,0);
+  const mesNome=new Date().toLocaleDateString('pt-BR',{month:'long'});
+
+  const barra=`<div class="barra-filtros">
+    <button class="btn btn-primario btn-sm" onclick="formFixo()">+ Custo fixo</button>
+    <button class="btn btn-sec btn-sm" onclick="lancarFixos()">Lançar custos fixos de ${mesNome}</button>
+    <span style="margin-left:auto;font-size:13.5px;color:var(--tinta-suave)">Total fixo mensal: <strong style="color:var(--tinta)">${brl(total)}</strong></span>
+  </div>`;
+
+  if(!lista.length) return barra+vazio('coin','Nenhum custo fixo cadastrado','Cadastre energia, internet, IPTU, gás, condomínio… para lançar todo mês em um clique.','Novo custo fixo','formFixo');
+
+  const linhas=lista.map(x=>{
+    const ok=lancadoEsteMes(x.propId,x.categoria);
+    return `<tr>
+      <td>${esc(x.propNome)}</td>
+      <td><span class="tag">${CAT_LABEL[x.categoria]||x.categoria}</span></td>
+      <td class="num"><strong>${brl(x.valor)}</strong></td>
+      <td>${ok?'<span class="pill st-PAGO">Lançado no mês</span>':'<span class="pill st-PENDENTE">A lançar</span>'}</td>
+      <td class="acoes-cel">
+        <button class="btn btn-fantasma btn-sm" onclick="formFixo('${x.id}')">Editar</button>
+        <button class="btn btn-fantasma btn-sm" onclick="excluirFixo('${x.id}')">✕</button></td></tr>`;
+  }).join('');
+
+  return barra+`<div class="card tabela-wrap"><table>
+      <thead><tr><th>Imóvel</th><th>Categoria</th><th class="num">Valor mensal</th><th>Status do mês</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot><tr><td colspan="2" style="font-weight:600">Total mensal</td><td class="num" style="font-weight:700">${brl(total)}</td><td colspan="2"></td></tr></tfoot>
+    </table></div>
+    <p class="ajuda" style="margin-top:12px">Estes valores são modelos recorrentes (sem dia de vencimento — só o mês). Use “Lançar custos fixos de ${mesNome}” para criar as despesas do mês na aba <strong>Custos</strong> (sem duplicar o que já foi lançado).</p>`;
+}
+function acharFixo(id){
+  for(const p of db.properties){ const cf=(p.custosFixos||[]).find(c=>c.id===id); if(cf) return {prop:p,cf}; }
+  return null;
+}
+function formFixo(id){
+  const achado= id? acharFixo(id):null;
+  const cf= achado? achado.cf : {categoria:'ENERGIA'};
+  const propAtual= achado? achado.prop.id : (filtroImovel||(db.properties[0]&&db.properties[0].id));
+  const opImoveis=db.properties.map(p=>`<option value="${p.id}" ${propAtual===p.id?'selected':''}>${esc(p.nome)}</option>`).join('');
+  const corpo=`
+    <div class="campo"><label>Imóvel *</label><select id="x-imovel">${opImoveis}</select></div>
+    <div class="form-grid">
+      <div class="campo"><label>Categoria *</label><select id="x-cat">${CATEGORIAS.map(k=>`<option value="${k}" ${cf.categoria===k?'selected':''}>${CAT_LABEL[k]}</option>`).join('')}</select></div>
+      <div class="campo"><label>Valor mensal (R$) *</label><input id="x-val" type="number" step="0.01" value="${cf.valor||''}"/></div>
+    </div>
+    <div class="ajuda">O custo fixo é lançado por mês, sem dia de vencimento.</div>`;
+  abrirModal(id?'Editar custo fixo':'Novo custo fixo', corpo, ()=>{
+    const propId=val('x-imovel'), valor=Number(val('x-val'))||0;
+    if(!propId) return toast('Selecione o imóvel',true);
+    if(valor<=0) return toast('Informe o valor mensal',true);
+    const novo={id:id||uid(),categoria:val('x-cat'),valor};
+    // remove de onde estava (caso troque de imóvel) e adiciona no imóvel escolhido
+    if(id){ db.properties.forEach(p=>{ if(p.custosFixos) p.custosFixos=p.custosFixos.filter(c=>c.id!==id); }); }
+    const alvo=db.properties.find(p=>p.id===propId);
+    if(!alvo.custosFixos) alvo.custosFixos=[];
+    alvo.custosFixos.push(novo);
+    salvar(); fecharModal(); render(); toast(id?'Custo fixo atualizado':'Custo fixo cadastrado');
+  });
+}
+function excluirFixo(id){
+  const achado=acharFixo(id); if(!achado) return;
+  confirmar('Excluir custo fixo?', CAT_LABEL[achado.cf.categoria]+' · '+achado.prop.nome+' · '+brl(achado.cf.valor)+'/mês', ()=>{
+    achado.prop.custosFixos=achado.prop.custosFixos.filter(c=>c.id!==id);
+    salvar(); render(); toast('Custo fixo removido');
+  });
+}
+
+/* ====================================================================
+   VIEW: AGENDA
+==================================================================== */
+function viewAgenda(){
+  if(!db.properties.length) return vazio('cal','Cadastre um imóvel primeiro','A agenda mostra reservas e bloqueios dos seus imóveis.','Ir para Imóveis',"irPara('imoveis')",true);
+  const h=hoje();
+  const futuras=db.reservations.filter(r=>r.kind!=='BLOCK'&&r.status!=='CANCELADA'&&(!filtroImovel||r.propertyId===filtroImovel));
+  const proxIn=futuras.filter(r=>d(r.checkin)>=h).sort((a,b)=>d(a.checkin)-d(b.checkin)).slice(0,5);
+  const proxOut=futuras.filter(r=>d(r.checkout)>=h).sort((a,b)=>d(a.checkout)-d(b.checkout)).slice(0,5);
+
+  const cards=`<div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
+    ${miniLista('Próximos check-ins',proxIn,'checkin')}
+    ${miniLista('Próximos check-outs',proxOut,'checkout')}
+  </div>`;
+  return cards+`<div class="card chart-card" style="margin-top:16px">
+    <div class="cal-cab">
+      <button class="btn btn-sec btn-sm" onclick="mudarMes(-1)">‹</button>
+      <span class="mes">${calRef.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</span>
+      <button class="btn btn-sec btn-sm" onclick="mudarMes(1)">›</button>
+      <button class="btn btn-fantasma btn-sm" onclick="calHoje()">Hoje</button>
+    </div>
+    ${calendario()}
+    <div class="legenda">
+      <span><i style="background:#9ad0bb"></i> Check-in</span>
+      <span><i style="background:#cfe6dc"></i> Hospedado</span>
+      <span><i style="background:#c9bbe0"></i> Bloqueio</span>
+      <span><i style="background:var(--coral)"></i> Hoje</span>
+    </div>
+  </div>`;
+}
+function miniLista(tit,arr,campo){
+  const telLink=t=> t? 'tel:'+String(t).replace(/[^0-9+]/g,'') : '';
+  const itens = arr.length? arr.map(r=>`<div style="padding:11px 0;border-bottom:1px solid var(--areia-2)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <strong>${esc(r.hospedeNome)||'Hóspede'}</strong>
+        <span style="font-size:12px;color:var(--coral);font-weight:600;white-space:nowrap">${diasAte(r[campo])}</span>
+      </div>
+      <div style="font-size:12px;color:var(--tinta-suave);margin:1px 0 6px">${esc(imovelNome(r.propertyId))} · ${esc(r.plataforma)||'—'}</div>
+      <div style="font-size:12.5px;line-height:1.8">
+        <span style="color:var(--tinta-suave)">Check-in:</span> ${brDate(r.checkin)} &nbsp;·&nbsp; <span style="color:var(--tinta-suave)">Check-out:</span> ${brDate(r.checkout)}<br/>
+        <span style="color:var(--tinta-suave)">Hóspedes:</span> ${r.hospedes||1}${r.hospedeTel?` &nbsp;·&nbsp; <span style="color:var(--tinta-suave)">Tel:</span> <a href="${telLink(r.hospedeTel)}" style="color:var(--mar-fundo);font-weight:600">${esc(r.hospedeTel)}</a>`:''}
+      </div>
+      <div style="margin-top:7px"><button class="btn btn-sec btn-sm" onclick="formReserva('${r.id}')">Editar informações</button></div>
+    </div>`).join('') : '<div style="color:var(--tinta-suave);padding:14px 0;font-size:13.5px">Nada nos próximos dias.</div>';
+  return `<div class="card chart-card"><h3>${tit}</h3>${itens}</div>`;
+}
+function diasAte(str){ const dias=Math.round((d(str)-hoje())/86400000); if(dias===0)return'hoje'; if(dias===1)return'amanhã'; if(dias<0)return Math.abs(dias)+'d atrás'; return 'em '+dias+'d'; }
+function mudarMes(n){ calRef.setMonth(calRef.getMonth()+n); render(); }
+function calHoje(){ calRef=new Date(); calRef.setDate(1); render(); }
+function calendario(){
+  const ano=calRef.getFullYear(), mes=calRef.getMonth();
+  const primeiro=new Date(ano,mes,1), inicioSemana=primeiro.getDay();
+  const diasNoMes=new Date(ano,mes+1,0).getDate();
+  const hojeStr=ymd(hoje());
+  const dows=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(x=>`<div class="cal-dow">${x}</div>`).join('');
+  let cels='';
+  for(let i=0;i<inicioSemana;i++) cels+='<div class="cal-dia fora"></div>';
+  for(let dia=1;dia<=diasNoMes;dia++){
+    const dataStr=ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(dia).padStart(2,'0');
+    const eventos=eventosDoDia(dataStr);
+    const evHtml=eventos.slice(0,3).map(e=>`<div class="cal-ev ${e.cls}" title="${esc(e.title||'')}" onclick="${e.onclick}">${esc(e.txt)}</div>`).join('')+(eventos.length>3?`<div style="font-size:10px;color:var(--tinta-suave);margin-top:2px">+${eventos.length-3}</div>`:'');
+    cels+=`<div class="cal-dia ${dataStr===hojeStr?'hoje':''}"><div class="dnum">${dia}</div>${evHtml}</div>`;
+  }
+  return `<div class="cal-grid">${dows}${cels}</div>`;
+}
+function eventosDoDia(dataStr){
+  const dt=d(dataStr), ev=[];
+  db.reservations.forEach(r=>{
+    if(r.status==='CANCELADA') return;
+    if(filtroImovel && r.propertyId!==filtroImovel) return;
+    const ci=d(r.checkin), co=d(r.checkout);
+    if(dt>=ci && dt<co){
+      if(r.kind==='BLOCK'){
+        ev.push({cls:'ev-block',txt:'Bloqueio',title:'Bloqueio · '+imovelNome(r.propertyId)+' · '+(r.motivo||'')+' · '+brDate(r.checkin)+'→'+brDate(r.checkout),onclick:`formBloqueio('${r.id}')`});
+      }else{
+        const det=(r.hospedeNome||'Hóspede')+' · '+imovelNome(r.propertyId)+'\nCheck-in '+brDate(r.checkin)+' · Check-out '+brDate(r.checkout)+'\n'+(r.hospedes||1)+' hóspede(s)'+(r.hospedeTel?' · '+r.hospedeTel:'');
+        if(dataStr===r.checkin) ev.push({cls:'ev-in',txt:'▸ '+(r.hospedeNome||'Check-in'),title:det,onclick:`formReserva('${r.id}')`});
+        else ev.push({cls:'ev-mid',txt:(r.hospedeNome||'Hospedado'),title:det,onclick:`formReserva('${r.id}')`});
+      }
+    }
+  });
+  return ev;
+}
+
+/* ====================================================================
+   VIEW: FINANCEIRO / PAINEL
+==================================================================== */
+let periodoSel='30';
+function periodoRange(){
+  const h=hoje();
+  if(periodoSel==='tudo'){
+    const dts=[];
+    db.reservations.forEach(r=>{ dts.push(d(r.checkin)); dts.push(d(r.checkout)); });
+    db.costs.forEach(c=>{ dts.push(d(c.data)); });
+    if(!dts.length) return [new Date(h.getFullYear(),0,1), h];
+    return [new Date(Math.min(...dts)), new Date(Math.max(...dts))];
+  }
+  if(periodoSel==='mes'){ const i=new Date(h.getFullYear(),h.getMonth(),1); const f=new Date(h.getFullYear(),h.getMonth()+1,0); return [i,f]; }
+  if(periodoSel==='ano'){ return [new Date(h.getFullYear(),0,1), new Date(h.getFullYear(),11,31)]; }
+  const dias=Number(periodoSel); return [h, addDias(h,dias)];
+}
+function reservasNoPeriodo(ini,fim,incluirCancel){
+  return db.reservations.filter(r=> r.kind==='BOOKING' && (incluirCancel||r.status!=='CANCELADA') &&
+    (!filtroImovel||r.propertyId===filtroImovel) && d(r.checkin)<=fim && d(r.checkout)>=ini);
+}
+function calcMetricas(ini,fim){
+  const res=reservasNoPeriodo(ini,fim,false);
+  const receitaBruta=res.reduce((s,r)=>s+Number(r.valorBruto||0),0);
+  const receitaLiquida=res.reduce((s,r)=>s+Number(r.valorLiquido||0),0);
+  const custosArr=db.costs.filter(c=>(!filtroImovel||c.propertyId===filtroImovel)&&d(c.data)>=ini&&d(c.data)<=fim);
+  const custos=custosArr.reduce((s,c)=>s+Number(c.valor||0),0);
+  const lucro=receitaLiquida-custos;
+  const margem=receitaLiquida>0?lucro/receitaLiquida*100:0;
+  const numImoveis=filtroImovel?1:db.properties.length;
+  const dias=Math.round((fim-ini)/86400000)+1;
+  const noitesDisp=numImoveis*dias;
+  let noitesVend=0;
+  res.forEach(r=>{ const a=d(r.checkin)>ini?d(r.checkin):ini; const b=d(r.checkout)<fim?d(r.checkout):fim; noitesVend+=Math.max(0,Math.round((b-a)/86400000)); });
+  const ocup=noitesDisp>0?noitesVend/noitesDisp*100:0;
+  const adr=noitesVend>0?receitaBruta/noitesVend:0;
+  const revpar=noitesDisp>0?receitaBruta/noitesDisp:0;
+  const ticket=res.length>0?receitaBruta/res.length:0;
+  const estadia=res.length>0?res.reduce((s,r)=>s+(r.noites||0),0)/res.length:0;
+  return {receitaBruta,receitaLiquida,custos,lucro,margem,ocup,adr,revpar,ticket,estadia,nReservas:res.length,noitesVend,noitesDisp,custosArr};
+}
+function metricas(){
+  const m=calcMetricas(...periodoRange());
+  m.futura=db.reservations.filter(r=>r.kind==='BOOKING'&&['CONFIRMADA','PENDENTE'].includes(r.status)&&(!filtroImovel||r.propertyId===filtroImovel)&&d(r.checkin)>hoje()).reduce((s,r)=>s+Number(r.valorLiquido||0),0);
+  return m;
+}
+function anosComDados(){
+  const set=new Set();
+  db.reservations.forEach(r=>{ if((!filtroImovel||r.propertyId===filtroImovel)&&r.kind==='BOOKING') set.add(d(r.checkin).getFullYear()); });
+  db.costs.forEach(c=>{ if(!filtroImovel||c.propertyId===filtroImovel) set.add(d(c.data).getFullYear()); });
+  return [...set].sort((a,b)=>b-a);
+}
+function tabelaPorAno(){
+  const anos=anosComDados();
+  if(!anos.length) return '';
+  const linhas=anos.map(ano=>{
+    const m=calcMetricas(new Date(ano,0,1), new Date(ano,11,31));
+    return `<tr>
+      <td><strong>${ano}</strong></td>
+      <td class="num">${m.nReservas}</td>
+      <td class="num">${m.noitesVend}</td>
+      <td class="num">${pct(m.ocup)}</td>
+      <td class="num">${brl(m.receitaBruta)}</td>
+      <td class="num">${brl(m.receitaLiquida)}</td>
+      <td class="num">${brl(m.custos)}</td>
+      <td class="num" style="color:${m.lucro>=0?'var(--verde)':'var(--vermelho)'}">${brl(m.lucro)}</td>
+      <td class="num">${pct(m.margem)}</td>
+      <td class="num">${brl(m.adr)}</td>
+      <td class="num">${brl(m.revpar)}</td>
+      <td class="num">${brl(m.ticket)}</td>
+      <td class="num">${(m.estadia||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="secao-tit"><h3>Desempenho por ano</h3><div class="linha-h"></div></div>
+    <div class="card tabela-wrap" style="margin-bottom:6px"><table>
+      <thead><tr><th>Ano</th><th class="num">Reservas</th><th class="num">Noites</th><th class="num">Ocup.</th><th class="num">Rec. bruta</th><th class="num">Rec. líq.</th><th class="num">Custos</th><th class="num">Lucro</th><th class="num">Margem</th><th class="num">ADR</th><th class="num">RevPAR</th><th class="num">Ticket</th><th class="num">Estadia</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>
+    <p class="ajuda" style="margin-bottom:10px">Receita líquida já com a comissão do Booking descontada; no Airbnb usa os ganhos líquidos do anfitrião.</p>`;
+}
+function viewFinanceiro(){
+  if(!db.properties.length) return vazio('chart','Bem-vindo ao C. Arias','Cadastre um imóvel e lance algumas reservas para ver seus números aqui.','Cadastrar imóvel','formImovel');
+  const m=metricas();
+  const seg=`<div class="seg">
+    ${[['mes','Mês'],['30','30d'],['90','90d'],['365','12m'],['ano','Ano'],['tudo','Desde o início']].map(([v,l])=>`<button class="${periodoSel===v?'on':''}" onclick="periodoSel='${v}';render()">${l}</button>`).join('')}
+  </div>`;
+  const kpis=`<div class="grid kpis">
+    ${kpi('Receita líquida',brl(m.receitaLiquida),'bruto '+brl(m.receitaBruta))}
+    ${kpi('Custos',brl(m.custos),m.custosArr.length+' lançamento(s)')}
+    ${kpi('Lucro',brl(m.lucro),'margem '+pct(m.margem),m.lucro>=0?'pos':'neg')}
+    ${kpi('Ocupação',pct(m.ocup),m.noitesVend+' noites vendidas')}
+    ${kpi('Diária média (ADR)',brl(m.adr),'')}
+    ${kpi('RevPAR',brl(m.revpar),'receita por noite disponível')}
+    ${kpi('Ticket médio',brl(m.ticket),m.nReservas+' reserva(s)')}
+    ${kpi('Receita futura',brl(m.futura),'reservas a partir de hoje')}
+  </div>`;
+  const charts=`<div class="grid charts-grid">
+    <div class="card chart-card"><h3>Receita por mês (12 meses)</h3><div class="chart-box"><canvas id="ch-receita"></canvas></div></div>
+    <div class="card chart-card"><h3>Receita por plataforma</h3><div class="chart-box"><canvas id="ch-plat"></canvas></div></div>
+    <div class="card chart-card"><h3>Custos por categoria</h3><div class="chart-box"><canvas id="ch-custo"></canvas></div></div>
+    <div class="card chart-card"><h3>Ocupação por mês</h3><div class="chart-box"><canvas id="ch-ocup"></canvas></div></div>
+  </div>`;
+  return seg+kpis+ranking()+tabelaPorAno()+charts;
+}
+function kpi(rotulo,valor,nota,cls){ return `<div class="card kpi"><div class="rotulo">${rotulo}</div><div class="valor ${cls||''}">${valor}</div><div class="nota">${nota||''}</div></div>`; }
+function ranking(){
+  const dados=db.properties.filter(p=>!filtroImovel||p.id===filtroImovel).map(p=>{
+    const res=db.reservations.filter(r=>r.kind==='BOOKING'&&r.status!=='CANCELADA'&&r.propertyId===p.id);
+    const rec=res.reduce((s,r)=>s+Number(r.valorLiquido||0),0);
+    const cus=db.costs.filter(c=>c.propertyId===p.id).reduce((s,c)=>s+Number(c.valor||0),0);
+    const noites=res.reduce((s,r)=>s+(r.noites||0),0);
+    return {nome:p.nome,rec,lucro:rec-cus,res:res.length,noites};
+  }).sort((a,b)=>b.rec-a.rec);
+  if(!dados.length||dados.every(x=>x.res===0)) return '';
+  return `<div class="secao-tit"><h3>Ranking de imóveis</h3><div class="linha-h"></div></div>
+    <div class="card tabela-wrap" style="margin-bottom:8px"><table>
+    <thead><tr><th>Imóvel</th><th class="num">Reservas</th><th class="num">Noites</th><th class="num">Receita líq.</th><th class="num">Lucro</th></tr></thead>
+    <tbody>${dados.map(x=>`<tr><td><strong>${esc(x.nome)}</strong></td><td class="num">${x.res}</td><td class="num">${x.noites}</td><td class="num">${brl(x.rec)}</td><td class="num" style="color:${x.lucro>=0?'var(--verde)':'var(--vermelho)'}">${brl(x.lucro)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+function ultimos12(){ const arr=[]; const h=hoje(); for(let i=11;i>=0;i--){ const dt=new Date(h.getFullYear(),h.getMonth()-i,1); arr.push({ano:dt.getFullYear(),mes:dt.getMonth(),label:dt.toLocaleDateString('pt-BR',{month:'short'}).replace('.','')}); } return arr; }
+function montarCharts(){
+  if(typeof Chart==='undefined') return;
+  Chart.defaults.font.family="'Inter',sans-serif"; Chart.defaults.font.size=12; Chart.defaults.color='#4c6a70';
+  const meses=ultimos12();
+  const resAll=db.reservations.filter(r=>r.kind==='BOOKING'&&r.status!=='CANCELADA'&&(!filtroImovel||r.propertyId===filtroImovel));
+
+  // Receita por mês (pelo check-in)
+  const recMes=meses.map(mm=> resAll.filter(r=>{const c=d(r.checkin);return c.getFullYear()===mm.ano&&c.getMonth()===mm.mes;}).reduce((s,r)=>s+Number(r.valorLiquido||0),0));
+  novoChart('ch-receita',{type:'bar',data:{labels:meses.map(m=>m.label),datasets:[{data:recMes,backgroundColor:'#28727c',borderRadius:6}]},options:optBar(true)});
+
+  // Plataforma
+  const plats={}; resAll.forEach(r=>{const k=r.plataforma||'Outra';plats[k]=(plats[k]||0)+Number(r.valorLiquido||0);});
+  const pk=Object.keys(plats);
+  if(pk.length) novoChart('ch-plat',{type:'doughnut',data:{labels:pk,datasets:[{data:pk.map(k=>plats[k]),backgroundColor:['#e07a5f','#28727c','#2f9e6f','#e9a13b','#5b4486'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},cutout:'60%'}});
+  else vazioCanvas('ch-plat');
+
+  // Custos por categoria
+  const cats={}; db.costs.filter(c=>!filtroImovel||c.propertyId===filtroImovel).forEach(c=>{cats[c.categoria]=(cats[c.categoria]||0)+Number(c.valor||0);});
+  const ck=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
+  if(ck.length) novoChart('ch-custo',{type:'bar',data:{labels:ck.map(k=>CAT_LABEL[k]||k),datasets:[{data:ck.map(k=>cats[k]),backgroundColor:'#e07a5f',borderRadius:6}]},options:{...optBar(true),indexAxis:'y'}});
+  else vazioCanvas('ch-custo');
+
+  // Ocupação por mês
+  const numImoveis=filtroImovel?1:Math.max(db.properties.length,1);
+  const ocupMes=meses.map(mm=>{
+    const diasMes=new Date(mm.ano,mm.mes+1,0).getDate(); const ini=new Date(mm.ano,mm.mes,1),fim=new Date(mm.ano,mm.mes+1,0);
+    let vend=0; resAll.forEach(r=>{const a=d(r.checkin)>ini?d(r.checkin):ini;const b=d(r.checkout)<fim?d(r.checkout):fim;vend+=Math.max(0,Math.round((b-a)/86400000));});
+    return Math.min(100, (vend/(numImoveis*diasMes))*100);
+  });
+  novoChart('ch-ocup',{type:'line',data:{labels:meses.map(m=>m.label),datasets:[{data:ocupMes,borderColor:'#2f9e6f',backgroundColor:'rgba(47,158,111,.12)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:'#2f9e6f'}]},options:{...optBar(false),scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
+}
+function optBar(moeda){ return {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>moeda?brl(c.parsed.y??c.parsed.x):(c.parsed.y||c.parsed)+''}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>moeda?'R$'+brlc(v):v}},x:{grid:{display:false}}}}; }
+function novoChart(id,cfg){ const el=document.getElementById(id); if(!el)return; chartRefs.push(new Chart(el,cfg)); }
+function vazioCanvas(id){ const el=document.getElementById(id); if(el){ const ctx=el.getContext('2d'); ctx.font="13px Inter"; ctx.fillStyle="#9aa"; ctx.textAlign="center"; ctx.fillText('Sem dados ainda',el.width/2,el.height/2);} }
+
+/* ====================================================================
+   VIEW: PLATAFORMAS (KPIs por canal de venda)
+==================================================================== */
+const COR_PLAT={'Airbnb':'#e07a5f','Booking.com':'#28727c','Direto':'#2f9e6f','Outra':'#e9a13b'};
+function plataformasPresentes(){
+  const set=new Set();
+  db.reservations.forEach(r=>{ if(r.kind==='BOOKING'&&(!filtroImovel||r.propertyId===filtroImovel)) set.add(r.plataforma||'Outra'); });
+  const ordem=['Airbnb','Booking.com','Direto','Outra'];
+  return [...set].sort((a,b)=>{const ia=ordem.indexOf(a),ib=ordem.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+}
+function metricasPlataforma(plat,ini,fim){
+  const dentro=r=> r.kind==='BOOKING'&&(r.plataforma||'Outra')===plat&&(!filtroImovel||r.propertyId===filtroImovel)&&d(r.checkin)<=fim&&d(r.checkout)>=ini;
+  const res=db.reservations.filter(r=>dentro(r)&&r.status!=='CANCELADA');
+  const bruta=res.reduce((s,r)=>s+Number(r.valorBruto||0),0);
+  const liquida=res.reduce((s,r)=>s+Number(r.valorLiquido||0),0);
+  const comissao=res.reduce((s,r)=>s+Number(r.taxaPlataforma||0),0);
+  let noites=0; res.forEach(r=>{const a=d(r.checkin)>ini?d(r.checkin):ini;const b=d(r.checkout)<fim?d(r.checkout):fim;noites+=Math.max(0,Math.round((b-a)/86400000));});
+  const reservas=res.length;
+  const adr=noites>0?bruta/noites:0;
+  const ticket=reservas>0?bruta/reservas:0;
+  const estadia=reservas>0?res.reduce((s,r)=>s+(r.noites||0),0)/reservas:0;
+  const taxaEf=bruta>0?comissao/bruta*100:0;
+  const cancel=db.reservations.filter(r=>dentro(r)&&r.status==='CANCELADA').length;
+  const taxaCancel=(reservas+cancel)>0?cancel/(reservas+cancel)*100:0;
+  return {plat,bruta,liquida,comissao,noites,reservas,adr,ticket,estadia,taxaEf,cancel,taxaCancel};
+}
+function statItem(rotulo,valor,nota){
+  return `<div style="padding:7px 0"><div class="rotulo">${rotulo}</div><div style="font-family:'Fraunces',serif;font-size:22px;font-weight:600;margin-top:3px;line-height:1">${valor}</div><div class="nota">${nota||''}</div></div>`;
+}
+function segPeriodo(){
+  return `<div class="seg">${[['mes','Mês'],['30','30d'],['90','90d'],['365','12m'],['ano','Ano'],['tudo','Desde o início']].map(([v,l])=>`<button class="${periodoSel===v?'on':''}" onclick="periodoSel='${v}';render()">${l}</button>`).join('')}</div>`;
+}
+function viewPlataformas(){
+  if(!db.properties.length) return vazio('chart','Sem dados ainda','Importe ou cadastre reservas para ver os KPIs por plataforma.','Ir para Reservas',"irPara('reservas')",true);
+  const plats=plataformasPresentes();
+  if(!plats.length) return segPeriodo()+vazio('chart','Nenhuma reserva ainda','Importe os relatórios do Airbnb e Booking para comparar os canais.','Ir para Reservas',"irPara('reservas')",true);
+  const [ini,fim]=periodoRange();
+  const dados=plats.map(p=>metricasPlataforma(p,ini,fim));
+  const totalLiq=dados.reduce((s,x)=>s+x.liquida,0)||1;
+
+  const blocos=dados.map(x=>{
+    const cor=COR_PLAT[x.plat]||'#888';
+    return `<div class="card" style="padding:18px;border-top:4px solid ${cor}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <h3 style="margin:0;font-size:18px">${esc(x.plat)}</h3>
+        <span class="pill" style="background:${cor}22;color:${cor}">${pct(x.liquida/totalLiq*100)} da receita</span>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:4px 18px;margin-top:10px">
+        ${statItem('Receita líquida',brl(x.liquida),'bruto '+brl(x.bruta))}
+        ${statItem('Comissão paga',brl(x.comissao),'taxa efetiva '+pct(x.taxaEf))}
+        ${statItem('Reservas',x.reservas,x.noites+' noites')}
+        ${statItem('Diária média (ADR)',brl(x.adr),'')}
+        ${statItem('Ticket médio',brl(x.ticket),'')}
+        ${statItem('Estadia média',(x.estadia||0).toLocaleString('pt-BR',{maximumFractionDigits:1})+' noites','')}
+        ${statItem('Cancelamentos',x.cancel,'taxa '+pct(x.taxaCancel))}
+      </div>
+    </div>`;
+  }).join('');
+
+  const tab=`<div class="secao-tit"><h3>Comparativo</h3><div class="linha-h"></div></div>
+    <div class="card tabela-wrap" style="margin-bottom:8px"><table>
+      <thead><tr><th>Plataforma</th><th class="num">Reservas</th><th class="num">Noites</th><th class="num">Rec. bruta</th><th class="num">Comissão</th><th class="num">Rec. líq.</th><th class="num">ADR</th><th class="num">Ticket</th><th class="num">Cancel.</th></tr></thead>
+      <tbody>${dados.map(x=>`<tr><td><strong>${esc(x.plat)}</strong></td><td class="num">${x.reservas}</td><td class="num">${x.noites}</td><td class="num">${brl(x.bruta)}</td><td class="num">${brl(x.comissao)}</td><td class="num">${brl(x.liquida)}</td><td class="num">${brl(x.adr)}</td><td class="num">${brl(x.ticket)}</td><td class="num">${x.cancel}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <p class="ajuda" style="margin-bottom:12px">Comissão = valor pago à plataforma. No Airbnb o relatório traz só o líquido (Ganhos), então a comissão aparece como zero e o bruto = líquido.</p>`;
+
+  const charts=`<div class="grid charts-grid">
+    <div class="card chart-card"><h3>Receita líquida por plataforma</h3><div class="chart-box"><canvas id="cp-receita"></canvas></div></div>
+    <div class="card chart-card"><h3>Diária média (ADR) por plataforma</h3><div class="chart-box"><canvas id="cp-adr"></canvas></div></div>
+  </div>`;
+
+  return segPeriodo()+`<div class="grid" style="grid-template-columns:1fr;gap:16px;margin-bottom:18px">${blocos}</div>`+tab+charts;
+}
+function montarChartsPlataforma(){
+  if(typeof Chart==='undefined') return;
+  Chart.defaults.font.family="'Inter',sans-serif"; Chart.defaults.color='#4c6a70';
+  const plats=plataformasPresentes(); if(!plats.length) return;
+  const [ini,fim]=periodoRange();
+  const dados=plats.map(p=>metricasPlataforma(p,ini,fim));
+  const cor=plats.map(p=>COR_PLAT[p]||'#888');
+  if(dados.some(x=>x.liquida>0)) novoChart('cp-receita',{type:'doughnut',data:{labels:plats,datasets:[{data:dados.map(x=>x.liquida),backgroundColor:cor,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},cutout:'60%'}}); else vazioCanvas('cp-receita');
+  if(dados.some(x=>x.adr>0)) novoChart('cp-adr',{type:'bar',data:{labels:plats,datasets:[{data:dados.map(x=>x.adr),backgroundColor:cor,borderRadius:6}]},options:optBar(true)}); else vazioCanvas('cp-adr');
+}
+
+/* ====================================================================
+   Modais / helpers de UI
+==================================================================== */
+function val(id){ const e=document.getElementById(id); return e?e.value:''; }
+function abrirModal(titulo,corpoHtml,onSalvar){
+  const host=document.getElementById('modal-host');
+  host.innerHTML=`<div class="overlay" id="ov"><div class="modal">
+    <div class="modal-cab"><h3>${titulo}</h3><button class="btn btn-fantasma" onclick="fecharModal()">✕</button></div>
+    <div class="modal-corpo">${corpoHtml}</div>
+    <div class="modal-rodape"><button class="btn btn-sec" onclick="fecharModal()">Cancelar</button><button class="btn btn-primario" id="modal-salvar">Salvar</button></div>
+  </div></div>`;
+  document.getElementById('modal-salvar').onclick=onSalvar;
+  document.getElementById('ov').addEventListener('mousedown',e=>{ if(e.target.id==='ov') fecharModal(); });
+}
+function fecharModal(){ document.getElementById('modal-host').innerHTML=''; }
+function confirmar(titulo,texto,onSim){
+  const host=document.getElementById('modal-host');
+  host.innerHTML=`<div class="overlay" id="ov"><div class="modal" style="max-width:420px">
+    <div class="modal-cab"><h3>${titulo}</h3></div>
+    <div class="modal-corpo"><p style="margin:0;color:var(--tinta-suave)">${texto||'Tem certeza?'}</p></div>
+    <div class="modal-rodape"><button class="btn btn-sec" onclick="fecharModal()">Cancelar</button><button class="btn btn-perigo" id="conf-sim">Excluir</button></div>
+  </div></div>`;
+  document.getElementById('conf-sim').onclick=()=>{ fecharModal(); onSim(); };
+}
+function vazio(icone,titulo,texto,btnTxt,acao,sec){
+  const icones={home:'<path d="M3 11l9-7 9 7M5 10v10h14V10"/>',list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',coin:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10"/>',cal:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',chart:'<path d="M3 3v18h18M7 14l4-4 3 3 5-6"/>'};
+  return `<div class="card vazio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${icones[icone]||icones.list}</svg>
+    <h3>${titulo}</h3><p>${texto}</p>
+    <button class="btn ${sec?'btn-sec':'btn-primario'}" style="margin-top:10px" onclick="${acao.includes('(')?acao:acao+'()'}">${btnTxt}</button></div>`;
+}
+
+/* ====================================================================
+   Dados de exemplo / reset / boot
+==================================================================== */
+function imoveisPadrao(){
+  return [
+    {id:uid(),nome:'Apto Wai Wai Cumbuco',endereco:'Cumbuco, Caucaia - CE',capacidade:4,checkin:'15:00',checkout:'11:00',taxaLimpeza:200,plataformas:['Airbnb','Booking.com'],custosFixos:[{id:uid(),categoria:'CONDOMINIO',valor:450,dia:10},{id:uid(),categoria:'ENERGIA',valor:160,dia:12},{id:uid(),categoria:'GAS',valor:90,dia:12},{id:uid(),categoria:'INTERNET',valor:100,dia:15},{id:uid(),categoria:'IPTU',valor:120,dia:20}],obs:''},
+    {id:uid(),nome:'Marco Zero SBC',endereco:'São Bernardo do Campo - SP',capacidade:2,checkin:'14:00',checkout:'11:00',taxaLimpeza:120,plataformas:['Airbnb'],custosFixos:[{id:uid(),categoria:'CONDOMINIO',valor:380,dia:5},{id:uid(),categoria:'INTERNET',valor:90,dia:8},{id:uid(),categoria:'IPTU',valor:85,dia:20}],obs:'Studio'}
+  ];
+}
+async function carregarExemplos(){
+  const imv=imoveisPadrao();
+  const w=imv[0].id, m=imv[1].id; const h=hoje();
+  const r=(p,plat,nome,offCi,nn,bruto,taxa,limp,st)=>{const ci=addDias(h,offCi),co=addDias(ci,nn);return {id:uid(),kind:'BOOKING',propertyId:p,plataforma:plat,hospedeNome:nome,codigo:'',checkin:ymd(ci),checkout:ymd(co),noites:nn,hospedes:2,valorBruto:bruto,taxaPlataforma:taxa,taxaLimpeza:limp,valorLiquido:bruto-taxa,status:st};};
+  db={
+    properties:imv,
+    reservations:[
+      r(w,'Airbnb','Marina Costa',-40,5,2500,375,200,'FINALIZADA'),
+      r(w,'Booking.com','João Silva',-12,4,2100,315,200,'FINALIZADA'),
+      r(w,'Airbnb','Pedro Alves',3,6,3200,480,200,'CONFIRMADA'),
+      r(w,'Direto','Ana Beatriz',20,7,3900,0,200,'PENDENTE'),
+      r(m,'Airbnb','Lucas Pereira',-8,3,990,148,120,'FINALIZADA'),
+      r(m,'Airbnb','Carla Dias',6,4,1320,198,120,'CONFIRMADA'),
+      {id:uid(),kind:'BLOCK',propertyId:w,checkin:ymd(addDias(h,14)),checkout:ymd(addDias(h,17)),noites:3,motivo:'Manutenção do ar-condicionado',status:'BLOQUEADA',valorBruto:0,valorLiquido:0}
+    ],
+    costs:[
+      {id:uid(),propertyId:w,data:ymd(addDias(h,-12)),categoria:'LIMPEZA',valor:200,descricao:'Pós check-out',statusPagamento:'PAGO'},
+      {id:uid(),propertyId:w,data:ymd(addDias(h,-5)),categoria:'ENERGIA',valor:180,descricao:'',statusPagamento:'PENDENTE'},
+      {id:uid(),propertyId:m,data:ymd(addDias(h,-8)),categoria:'LIMPEZA',valor:120,descricao:'',statusPagamento:'PAGO'},
+      {id:uid(),propertyId:m,data:ymd(addDias(h,-3)),categoria:'MANUTENCAO',valor:250,descricao:'Reparo no chuveiro',statusPagamento:'PENDENTE'}
+    ]
+  };
+  migrarFixos();
+  await salvar(); render(); toast('Dados de exemplo carregados');
+}
+function limparTudo(){
+  confirmar('Limpar todos os dados?','Imóveis, reservas e custos serão apagados deste navegador.',async()=>{
+    db={properties:[],reservations:[],costs:[]}; await salvar(); filtroImovel=''; render(); toast('Tudo limpo');
+  });
+}
+
+async function boot(){
+  const tinha=await carregar();
+  if(!tinha){ db={properties:imoveisPadrao(),reservations:[],costs:[]}; await salvar(); }
+  migrarFixos();
+  document.querySelectorAll('[data-view]').forEach(b=> b.addEventListener('click',()=>irPara(b.dataset.view)) );
+  document.getElementById('btn-add').addEventListener('click',onAdd);
+  document.getElementById('filtro-imovel').addEventListener('change',e=>{filtroImovel=e.target.value;render();});
+  document.getElementById('btn-exemplo').addEventListener('click',carregarExemplos);
+  document.getElementById('btn-limpar').addEventListener('click',limparTudo);
+  irPara('financeiro');
+}
+boot();
+</script>
+</body>
+</html>

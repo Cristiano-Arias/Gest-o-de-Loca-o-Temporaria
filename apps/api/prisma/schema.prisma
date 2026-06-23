@@ -1,0 +1,441 @@
+// =====================================================================
+// Sistema de Gestão de Locação por Temporada — Schema Prisma
+// PostgreSQL · Prisma ORM
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------- ENUMS ---------------------------------
+
+enum UserRole {
+  OWNER       // dono / proprietário
+  OPERATOR    // operador / gestor
+  STAFF       // limpeza, manutenção
+}
+
+enum ReservationKind {
+  BOOKING     // reserva real
+  BLOCK       // bloqueio (manutenção, uso próprio)
+}
+
+enum ReservationStatus {
+  PENDENTE
+  CONFIRMADA
+  HOSPEDADO
+  FINALIZADA
+  CANCELADA
+  BLOQUEADA
+}
+
+enum CostCategory {
+  LIMPEZA
+  CONDOMINIO
+  IPTU
+  ENERGIA
+  AGUA
+  GAS
+  INTERNET
+  MANUTENCAO
+  COMPRAS
+  REPOSICAO_ITENS
+  LAVANDERIA
+  TAXAS_BANCARIAS
+  OUTROS
+}
+
+enum PaymentType {
+  RECEITA     // entrada (reserva)
+  DESPESA     // saída (custo)
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+enum AttachmentType {
+  PRINT
+  PDF
+  PLANILHA
+  COMPROVANTE
+  RECIBO
+  NOTA_FISCAL
+  FOTO
+  OUTRO
+}
+
+enum AttachmentSource {
+  WHATSAPP
+  WEB_UPLOAD
+  EMAIL
+}
+
+enum ExtractionStatus {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDO
+  FALHOU
+  AGUARDANDO_CONFIRMACAO
+}
+
+enum AlertType {
+  CHECKIN_AMANHA
+  CHECKOUT_AMANHA
+  RESERVA_NOVA
+  RESERVA_CANCELADA
+  PAGAMENTO_PENDENTE
+  DATA_VAGA_ALTA_TEMPORADA
+  CONFLITO_AGENDA
+  CUSTO_ACIMA_MEDIA
+  QUEDA_OCUPACAO
+}
+
+enum AlertStatus {
+  AGENDADO
+  ENVIADO
+  LIDO
+  DISPENSADO
+  FALHOU
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageIntent {
+  NOVA_RESERVA
+  LANCAR_CUSTO
+  BLOQUEAR
+  CONSULTA_AGENDA
+  CONSULTA_FINANCEIRA
+  CONSULTA_METRICA
+  GERAR_RELATORIO
+  ANEXO
+  AJUDA
+  DESCONHECIDO
+}
+
+enum ConversationState {
+  OCIOSO
+  AGUARDANDO_CAMPO       // esperando o usuário completar um dado faltante
+  AGUARDANDO_CONFIRMACAO // esperando "sim/não" para gravar
+}
+
+enum ReportFormat {
+  PDF
+  EXCEL
+}
+
+enum ReportStatus {
+  PENDENTE
+  GERANDO
+  PRONTO
+  FALHOU
+}
+
+// ----------------------------- MODELS --------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  telefone  String?  @unique // número WhatsApp (E.164)
+  senhaHash String?
+  papel     UserRole @default(OWNER)
+  ativo     Boolean  @default(true)
+
+  properties     Property[]
+  messages       WhatsAppMessage[]
+  conversations  WhatsAppConversation[]
+  reports        Report[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([telefone])
+}
+
+model Platform {
+  id             String  @id @default(uuid())
+  nome           String  @unique // Airbnb, Booking.com, Direto, ...
+  comissaoPadrao Decimal @default(0) @db.Decimal(5, 2) // %
+  ativo          Boolean @default(true)
+
+  listings     PropertyListing[]
+  reservations Reservation[]
+
+  criadoEm DateTime @default(now())
+}
+
+model Property {
+  id            String  @id @default(uuid())
+  userId        String
+  nome          String
+  endereco      String?
+  capacidade    Int     @default(2)
+  checkinPadrao String? @default("15:00") // HH:mm
+  checkoutPadrao String? @default("11:00")
+  taxaLimpeza   Decimal @default(0) @db.Decimal(10, 2)
+  observacoes   String?
+  ativo         Boolean @default(true)
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings      PropertyListing[]
+  reservations  Reservation[]
+  costs         Cost[]
+  recurringCosts RecurringCost[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// N:N entre Imóvel e Plataforma (mesmo imóvel anunciado em vários canais)
+model PropertyListing {
+  id                String  @id @default(uuid())
+  propertyId        String
+  platformId        String
+  listingExternalId String? // ID do anúncio na plataforma
+  icalUrl           String? // URL de exportação iCal (Airbnb/Booking)
+  ativo             Boolean @default(true)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  platform Platform @relation(fields: [platformId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  @@unique([propertyId, platformId])
+  @@index([propertyId])
+}
+
+model Guest {
+  id        String  @id @default(uuid())
+  nome      String
+  telefone  String?
+  email     String?
+  documento String? // CPF ou passaporte
+
+  reservations Reservation[]
+
+  criadoEm DateTime @default(now())
+
+  @@index([documento])
+  @@index([email])
+}
+
+model Reservation {
+  id            String            @id @default(uuid())
+  propertyId    String
+  guestId       String?
+  platformId    String?
+  kind          ReservationKind   @default(BOOKING)
+  codigoReserva String?           // código externo da plataforma
+  checkin       DateTime          @db.Date
+  checkout      DateTime          @db.Date
+  noites        Int
+  hospedes      Int               @default(1)
+  valorBruto    Decimal           @default(0) @db.Decimal(10, 2)
+  taxaPlataforma Decimal          @default(0) @db.Decimal(10, 2)
+  taxaLimpeza   Decimal           @default(0) @db.Decimal(10, 2)
+  valorLiquido  Decimal           @default(0) @db.Decimal(10, 2)
+  status        ReservationStatus @default(PENDENTE)
+  motivoBloqueio String?          // quando kind=BLOCK
+  observacoes   String?
+
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  guest       Guest?       @relation(fields: [guestId], references: [id])
+  platform    Platform?    @relation(fields: [platformId], references: [id])
+  costs       Cost[]
+  payments    Payment[]
+  attachments Attachment[]
+  alerts      Alert[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Idempotência: não duplicar a mesma reserva de uma plataforma
+  @@unique([platformId, codigoReserva])
+  @@index([propertyId, checkin, checkout])
+  @@index([status])
+  @@index([checkin])
+}
+
+model Cost {
+  id             String        @id @default(uuid())
+  propertyId     String
+  reservationId  String?       // custo pode estar ligado a uma reserva (ex.: limpeza)
+  data           DateTime      @db.Date
+  categoria      CostCategory
+  valor          Decimal       @db.Decimal(10, 2)
+  descricao      String?
+  statusPagamento PaymentStatus @default(PENDENTE)
+
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+  attachments Attachment[]
+  payments    Payment[]
+  alerts      Alert[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([propertyId, data])
+  @@index([categoria])
+  @@index([statusPagamento])
+}
+
+// Custo fixo recorrente (template que o cron materializa em Cost a cada mês)
+model RecurringCost {
+  id          String       @id @default(uuid())
+  propertyId  String
+  categoria   CostCategory
+  valorMensal Decimal      @db.Decimal(10, 2)
+  ativo       Boolean      @default(true)
+  // Custo fixo é lançado por mês, sem dia de vencimento (decisão do protótipo).
+  // O Cost gerado recebe data = primeiro dia do mês de referência.
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now())
+
+  @@index([propertyId])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  reservationId String?
+  costId        String?
+  tipo          PaymentType
+  valor         Decimal       @db.Decimal(10, 2)
+  data          DateTime      @db.Date
+  status        PaymentStatus @default(PENDENTE)
+  metodo        String?       // pix, cartão, transferência
+
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+  cost        Cost?        @relation(fields: [costId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  @@index([data])
+  @@index([status])
+}
+
+model Attachment {
+  id            String           @id @default(uuid())
+  url           String           // path no object storage
+  tipo          AttachmentType
+  mimeType      String?
+  origem        AttachmentSource
+  reservationId String?
+  costId        String?
+  messageId     String?          @unique
+
+  reservation   Reservation?    @relation(fields: [reservationId], references: [id])
+  cost          Cost?           @relation(fields: [costId], references: [id])
+  message       WhatsAppMessage? @relation(fields: [messageId], references: [id])
+  extractionJob ExtractionJob?
+
+  criadoEm DateTime @default(now())
+}
+
+model ExtractionJob {
+  id            String           @id @default(uuid())
+  attachmentId  String           @unique
+  status        ExtractionStatus @default(PENDENTE)
+  resultado     Json?            // JSON estruturado retornado pela IA
+  confiancaMedia Decimal?        @db.Decimal(4, 3)
+  erro          String?
+  tentativas    Int              @default(0)
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Alert {
+  id            String      @id @default(uuid())
+  tipo          AlertType
+  mensagem      String
+  status        AlertStatus @default(AGENDADO)
+  agendadoPara  DateTime
+  enviadoEm     DateTime?
+  reservationId String?
+  costId        String?
+
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+  cost        Cost?        @relation(fields: [costId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  @@index([status, agendadoPara])
+  @@index([tipo])
+}
+
+model WhatsAppConversation {
+  id              String            @id @default(uuid())
+  userId          String
+  estado          ConversationState @default(OCIOSO)
+  intencaoPendente MessageIntent?
+  contextoPendente Json?            // campos já coletados, faltantes, etc.
+  expiraEm        DateTime?
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages WhatsAppMessage[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([userId, estado])
+}
+
+model WhatsAppMessage {
+  id             String           @id @default(uuid())
+  userId         String
+  conversationId String?
+  direcao        MessageDirection
+  conteudo       String?          // texto da mensagem
+  intencao       MessageIntent?
+  payloadRaw     Json?            // payload bruto do webhook
+  waMessageId    String?          @unique // id da mensagem na Meta
+
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation WhatsAppConversation? @relation(fields: [conversationId], references: [id])
+  attachment   Attachment?
+
+  criadoEm DateTime @default(now())
+
+  @@index([userId, criadoEm])
+  @@index([intencao])
+}
+
+model Report {
+  id        String       @id @default(uuid())
+  userId    String
+  tipo      String       // "resumo_mes", "resumo_ano", ...
+  formato   ReportFormat
+  status    ReportStatus @default(PENDENTE)
+  url       String?      // link de download quando pronto
+  parametros Json?       // filtros usados
+  erro      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  criadoEm  DateTime @default(now())
+  prontoEm  DateTime?
+
+  @@index([userId, criadoEm])
+}

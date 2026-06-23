@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --mar-fundo: #28727c;
+  --areia: #f6f1e7;
+  --tinta: #123038;
+  --coral: #e07a5f;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--areia);
+  color: var(--tinta);
+  -webkit-font-smoothing: antialiased;
+}

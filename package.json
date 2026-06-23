@@ -1,0 +1,26 @@
+{
+  "name": "c-arias-saas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaaS C. Arias — Gestão de Locação por Temporada (monorepo)",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "db:generate": "pnpm --filter @c-arias/api db:generate",
+    "db:migrate": "pnpm --filter @c-arias/api db:migrate",
+    "db:studio": "pnpm --filter @c-arias/api db:studio"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp"
+    ]
+  }
+}
