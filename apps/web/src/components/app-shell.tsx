@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LogoutButton } from './logout-button';
 
 type NavItem = { key: string; rotulo: string; href?: string };
 
@@ -68,12 +69,7 @@ export function AppShell({
           })}
         </nav>
         <div className="mt-auto pt-4">
-          <Link
-            href="/sair"
-            className="text-xs text-[#bfe3e8] underline hover:text-white"
-          >
-            Sair
-          </Link>
+          <LogoutButton />
         </div>
       </aside>
 
