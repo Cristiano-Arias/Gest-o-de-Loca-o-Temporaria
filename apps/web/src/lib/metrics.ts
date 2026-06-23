@@ -334,3 +334,99 @@ export function ocupacaoPorMes(
     return Math.min(100, (vend / (numImoveis * diasMes)) * 100);
   });
 }
+
+// --- Plataformas (KPIs por canal de venda) ----------------------------
+
+// Cor de cada canal (espelha COR_PLAT do protótipo).
+export const COR_PLAT: Record<string, string> = {
+  Airbnb: '#e07a5f',
+  'Booking.com': '#28727c',
+  Direto: '#2f9e6f',
+  Outra: '#e9a13b',
+};
+
+// Canais presentes nas reservas, na ordem Airbnb → Booking → Direto → Outra.
+export function plataformasPresentes(
+  reservas: ReservaMetrica[],
+  filtroImovel: string,
+): string[] {
+  const set = new Set<string>();
+  reservas.forEach((r) => {
+    if (r.kind === 'BOOKING' && (!filtroImovel || r.propertyId === filtroImovel))
+      set.add(r.plataforma || 'Outra');
+  });
+  const ordem = ['Airbnb', 'Booking.com', 'Direto', 'Outra'];
+  return [...set].sort((a, b) => {
+    const ia = ordem.indexOf(a);
+    const ib = ordem.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+}
+
+export type MetricasPlataforma = {
+  plat: string;
+  bruta: number;
+  liquida: number;
+  comissao: number;
+  noites: number;
+  reservas: number;
+  adr: number;
+  ticket: number;
+  estadia: number;
+  taxaEf: number;
+  cancel: number;
+  taxaCancel: number;
+};
+
+export function metricasPlataforma(
+  reservas: ReservaMetrica[],
+  plat: string,
+  filtroImovel: string,
+  ini: Date,
+  fim: Date,
+): MetricasPlataforma {
+  const dentro = (r: ReservaMetrica) =>
+    r.kind === 'BOOKING' &&
+    (r.plataforma || 'Outra') === plat &&
+    (!filtroImovel || r.propertyId === filtroImovel) &&
+    parseISO(r.checkin) <= fim &&
+    parseISO(r.checkout) >= ini;
+
+  const res = reservas.filter((r) => dentro(r) && r.status !== 'CANCELADA');
+  const bruta = res.reduce((s, r) => s + r.valorBruto, 0);
+  const liquida = res.reduce((s, r) => s + r.valorLiquido, 0);
+  const comissao = res.reduce((s, r) => s + r.taxaPlataforma, 0);
+
+  let noites = 0;
+  res.forEach((r) => {
+    noites += noitesNaJanela(r, ini, fim);
+  });
+
+  const nReservas = res.length;
+  const adr = noites > 0 ? bruta / noites : 0;
+  const ticket = nReservas > 0 ? bruta / nReservas : 0;
+  const estadia =
+    nReservas > 0 ? res.reduce((s, r) => s + r.noites, 0) / nReservas : 0;
+  const taxaEf = bruta > 0 ? (comissao / bruta) * 100 : 0;
+
+  const cancel = reservas.filter(
+    (r) => dentro(r) && r.status === 'CANCELADA',
+  ).length;
+  const taxaCancel =
+    nReservas + cancel > 0 ? (cancel / (nReservas + cancel)) * 100 : 0;
+
+  return {
+    plat,
+    bruta,
+    liquida,
+    comissao,
+    noites,
+    reservas: nReservas,
+    adr,
+    ticket,
+    estadia,
+    taxaEf,
+    cancel,
+    taxaCancel,
+  };
+}

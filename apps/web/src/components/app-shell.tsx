@@ -11,7 +11,7 @@ const NAV: NavItem[] = [
   { key: 'agenda', rotulo: 'Agenda', href: '/agenda' },
   { key: 'custos', rotulo: 'Custos', href: '/custos' },
   { key: 'fixos', rotulo: 'Custos fixos', href: '/custos-fixos' },
-  { key: 'plataformas', rotulo: 'Plataformas' },
+  { key: 'plataformas', rotulo: 'Plataformas', href: '/plataformas' },
 ];
 
 // Moldura padrão das telas internas: barra lateral "C. Arias" + cabeçalho.

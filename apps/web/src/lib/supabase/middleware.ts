@@ -41,7 +41,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith('/imoveis') ||
     path.startsWith('/reservas') ||
     path.startsWith('/agenda') ||
-    path.startsWith('/custos');
+    path.startsWith('/custos') ||
+    path.startsWith('/plataformas');
 
   // Não logado tentando acessar área privada → manda para o login.
   if (!user && ehAreaPrivada) {

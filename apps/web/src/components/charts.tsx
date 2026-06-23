@@ -16,12 +16,15 @@ function SemDados() {
 }
 
 // Barras verticais (ex.: receita por mês). Valores em moeda.
+// `cores` opcional define a cor de cada barra (senão usa a cor do mar).
 export function BarrasVerticais({
   labels,
   valores,
+  cores,
 }: {
   labels: string[];
   valores: number[];
+  cores?: string[];
 }) {
   const max = Math.max(...valores, 1);
   if (!valores.some((v) => v > 0)) return <SemDados />;
@@ -32,8 +35,12 @@ export function BarrasVerticais({
           <div className="flex w-full flex-1 items-end">
             <div
               title={brl(v)}
-              className="w-full rounded-t bg-mar"
-              style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 2 : 0 }}
+              className={`w-full rounded-t ${cores ? '' : 'bg-mar'}`}
+              style={{
+                height: `${(v / max) * 100}%`,
+                minHeight: v > 0 ? 2 : 0,
+                backgroundColor: cores ? cores[i] : undefined,
+              }}
             />
           </div>
           <span className="text-[10px] text-tinta-suave">{labels[i]}</span>
@@ -74,13 +81,17 @@ export function BarrasHorizontais({
 }
 
 // Rosca (doughnut) — receita por plataforma, com legenda.
+// `cores` opcional define a cor de cada fatia (senão usa a paleta padrão).
 export function Rosca({
   itens,
+  cores,
 }: {
   itens: { label: string; valor: number }[];
+  cores?: string[];
 }) {
   const total = itens.reduce((s, x) => s + x.valor, 0);
   if (total <= 0) return <SemDados />;
+  const cor = (i: number) => cores?.[i] ?? PALETA[i % PALETA.length];
 
   const raio = 60;
   const circ = 2 * Math.PI * raio;
@@ -98,7 +109,7 @@ export function Rosca({
                 key={x.label}
                 r={raio}
                 fill="none"
-                stroke={PALETA[i % PALETA.length]}
+                stroke={cor(i)}
                 strokeWidth={26}
                 strokeDasharray={`${dash} ${circ - dash}`}
                 strokeDashoffset={-offset}
@@ -114,7 +125,7 @@ export function Rosca({
           <div key={x.label} className="flex items-center gap-2">
             <span
               className="inline-block h-3 w-3 rounded-sm"
-              style={{ backgroundColor: PALETA[i % PALETA.length] }}
+              style={{ backgroundColor: cor(i) }}
             />
             <span className="text-tinta">{x.label}</span>
             <span className="text-tinta-suave">
