@@ -38,7 +38,8 @@ export async function updateSession(request: NextRequest) {
   const ehAreaPrivada =
     path === '/' ||
     path.startsWith('/painel') ||
-    path.startsWith('/imoveis');
+    path.startsWith('/imoveis') ||
+    path.startsWith('/reservas');
 
   // Não logado tentando acessar área privada → manda para o login.
   if (!user && ehAreaPrivada) {

@@ -21,3 +21,18 @@ export const CATEGORIAS: { value: string; label: string }[] = [
 export function catLabel(value: string): string {
   return CATEGORIAS.find((c) => c.value === value)?.label ?? value;
 }
+
+// Status possíveis de uma reserva (espelha STATUS do protótipo).
+export const STATUS = [
+  'PENDENTE',
+  'CONFIRMADA',
+  'HOSPEDADO',
+  'FINALIZADA',
+  'CANCELADA',
+] as const;
+
+// Primeira letra maiúscula, resto minúsculo: "CONFIRMADA" → "Confirmada".
+export function statusLabel(value: string): string {
+  if (!value) return '—';
+  return value.charAt(0) + value.slice(1).toLowerCase();
+}

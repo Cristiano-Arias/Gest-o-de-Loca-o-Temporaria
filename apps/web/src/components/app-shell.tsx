@@ -7,7 +7,7 @@ type NavItem = { key: string; rotulo: string; href?: string };
 const NAV: NavItem[] = [
   { key: 'painel', rotulo: 'Painel', href: '/painel' },
   { key: 'imoveis', rotulo: 'Imóveis', href: '/imoveis' },
-  { key: 'reservas', rotulo: 'Reservas' },
+  { key: 'reservas', rotulo: 'Reservas', href: '/reservas' },
   { key: 'agenda', rotulo: 'Agenda' },
   { key: 'custos', rotulo: 'Custos' },
   { key: 'fixos', rotulo: 'Custos fixos' },
