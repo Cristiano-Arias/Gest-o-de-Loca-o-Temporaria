@@ -35,7 +35,10 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const ehAreaPrivada = path === '/' || path.startsWith('/painel');
+  const ehAreaPrivada =
+    path === '/' ||
+    path.startsWith('/painel') ||
+    path.startsWith('/imoveis');
 
   // Não logado tentando acessar área privada → manda para o login.
   if (!user && ehAreaPrivada) {
