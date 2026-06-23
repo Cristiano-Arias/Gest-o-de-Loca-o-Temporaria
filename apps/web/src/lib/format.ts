@@ -6,6 +6,31 @@ export function brl(n: number | null | undefined): string {
   });
 }
 
+// Moeda compacta sem centavos (para eixos de gráfico): 1234 -> "1.234".
+export function brlc(n: number | null | undefined): string {
+  return (Number(n) || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
+// Percentual com uma casa: 12.34 -> "12,3%". Espelha pct() do protótipo.
+export function pct(n: number | null | undefined): string {
+  return (
+    (Number(n) || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }) + '%'
+  );
+}
+
+// Número com uma casa decimal (ex.: estadia média).
+export function dec1(n: number | null | undefined): string {
+  return (Number(n) || 0).toLocaleString('pt-BR', {
+    maximumFractionDigits: 1,
+  });
+}
+
 // 'AAAA-MM-DD' → 'DD/MM/AAAA' (sem criar Date, evita fuso). Espelha brDate().
 export function brDate(iso: string | null | undefined): string {
   if (!iso) return '—';
