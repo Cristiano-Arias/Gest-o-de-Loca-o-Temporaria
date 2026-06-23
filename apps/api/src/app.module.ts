@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { PropertiesModule } from './properties/properties.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { CostsModule } from './costs/costs.module';
+import { RecurringCostsModule } from './recurring-costs/recurring-costs.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { CostsModule } from './costs/costs.module';
     PropertiesModule,
     ReservationsModule,
     CostsModule,
+    RecurringCostsModule,
   ],
   controllers: [HealthController],
 })
