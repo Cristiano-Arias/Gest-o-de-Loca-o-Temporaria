@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SupabaseUser } from '../auth/supabase-auth.guard';
+import { AuthUser } from '../auth/jwt-auth.guard';
 import { PropertyInput, RecurringCostInput } from './property.dto';
 
 // Inclui os relacionamentos que a tela de Imóveis precisa.
@@ -18,9 +18,9 @@ export class PropertiesService {
 
   /**
    * Garante que o usuário (dono dos dados, multi-tenant) exista localmente
-   * antes de gravar qualquer imóvel. O id é o mesmo do Supabase.
+   * antes de gravar qualquer imóvel. Normalmente já existe (criado no cadastro).
    */
-  private async ensureUser(user: SupabaseUser): Promise<string> {
+  private async ensureUser(user: AuthUser): Promise<string> {
     const email = user.email ?? `${user.id}@sem-email.local`;
     await this.prisma.user.upsert({
       where: { id: user.id },
@@ -29,13 +29,12 @@ export class PropertiesService {
         id: user.id,
         email,
         nome: email.split('@')[0],
-        telefone: user.phone ?? null,
       },
     });
     return user.id;
   }
 
-  async list(user: SupabaseUser) {
+  async list(user: AuthUser) {
     const imoveis = await this.prisma.property.findMany({
       where: { userId: user.id, ativo: true },
       orderBy: { nome: 'asc' },
@@ -44,7 +43,7 @@ export class PropertiesService {
     return imoveis.map((p) => this.toDTO(p));
   }
 
-  async findOne(user: SupabaseUser, id: string) {
+  async findOne(user: AuthUser, id: string) {
     const imovel = await this.prisma.property.findFirst({
       where: { id, userId: user.id },
       include: incluir,
@@ -53,7 +52,7 @@ export class PropertiesService {
     return this.toDTO(imovel);
   }
 
-  async create(user: SupabaseUser, input: PropertyInput) {
+  async create(user: AuthUser, input: PropertyInput) {
     const userId = await this.ensureUser(user);
     const imovel = await this.prisma.property.create({
       data: {
@@ -72,7 +71,7 @@ export class PropertiesService {
     return this.findOne(user, imovel.id);
   }
 
-  async update(user: SupabaseUser, id: string, input: PropertyInput) {
+  async update(user: AuthUser, id: string, input: PropertyInput) {
     await this.assertOwnership(user, id);
     await this.prisma.property.update({
       where: { id },
@@ -91,7 +90,7 @@ export class PropertiesService {
     return this.findOne(user, id);
   }
 
-  async remove(user: SupabaseUser, id: string) {
+  async remove(user: AuthUser, id: string) {
     await this.assertOwnership(user, id);
     // O onDelete: Cascade do schema remove reservas/custos vinculados.
     await this.prisma.property.delete({ where: { id } });
@@ -100,7 +99,7 @@ export class PropertiesService {
 
   // --- auxiliares -------------------------------------------------------
 
-  private async assertOwnership(user: SupabaseUser, id: string) {
+  private async assertOwnership(user: AuthUser, id: string) {
     const dono = await this.prisma.property.findFirst({
       where: { id, userId: user.id },
       select: { id: true },

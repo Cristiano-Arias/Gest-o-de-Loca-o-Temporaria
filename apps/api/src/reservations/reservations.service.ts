@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, ReservationKind, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SupabaseUser } from '../auth/supabase-auth.guard';
+import { AuthUser } from '../auth/jwt-auth.guard';
 import { ReservationInput } from './reservation.dto';
 
 const incluir = {
@@ -23,7 +23,7 @@ type ReservaComRelacoes = Prisma.ReservationGetPayload<{
 export class ReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(user: SupabaseUser, propertyId?: string) {
+  async list(user: AuthUser, propertyId?: string) {
     const where: Prisma.ReservationWhereInput = {
       property: { userId: user.id },
     };
@@ -37,7 +37,7 @@ export class ReservationsService {
     return reservas.map((r) => this.toDTO(r));
   }
 
-  async findOne(user: SupabaseUser, id: string) {
+  async findOne(user: AuthUser, id: string) {
     const reserva = await this.prisma.reservation.findFirst({
       where: { id, property: { userId: user.id } },
       include: incluir,
@@ -46,7 +46,7 @@ export class ReservationsService {
     return this.toDTO(reserva);
   }
 
-  async create(user: SupabaseUser, input: ReservationInput) {
+  async create(user: AuthUser, input: ReservationInput) {
     await this.assertProperty(user, input.propertyId);
 
     const ci = this.parseDate(input.checkin);
@@ -93,7 +93,7 @@ export class ReservationsService {
     return this.findOne(user, reserva.id);
   }
 
-  async update(user: SupabaseUser, id: string, input: ReservationInput) {
+  async update(user: AuthUser, id: string, input: ReservationInput) {
     const atual = await this.prisma.reservation.findFirst({
       where: { id, property: { userId: user.id } },
     });
@@ -146,7 +146,7 @@ export class ReservationsService {
     return this.findOne(user, id);
   }
 
-  async remove(user: SupabaseUser, id: string) {
+  async remove(user: AuthUser, id: string) {
     const reserva = await this.prisma.reservation.findFirst({
       where: { id, property: { userId: user.id } },
       select: { id: true },
@@ -167,7 +167,7 @@ export class ReservationsService {
     return Math.round((co.getTime() - ci.getTime()) / 86_400_000);
   }
 
-  private async assertProperty(user: SupabaseUser, propertyId: string) {
+  private async assertProperty(user: AuthUser, propertyId: string) {
     const dono = await this.prisma.property.findFirst({
       where: { id: propertyId, userId: user.id },
       select: { id: true },

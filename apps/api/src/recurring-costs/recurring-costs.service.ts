@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SupabaseUser } from '../auth/supabase-auth.guard';
+import { AuthUser } from '../auth/jwt-auth.guard';
 import { RecurringCostInput } from './recurring-cost.dto';
 
 const MARCA_FIXO = 'Custo fixo mensal';
@@ -13,7 +13,7 @@ export class RecurringCostsService {
    * Lista todos os custos fixos do usuário (achatados por imóvel), marcando
    * se já foram lançados no mês informado (status "Lançado no mês").
    */
-  async list(user: SupabaseUser, mes?: string) {
+  async list(user: AuthUser, mes?: string) {
     const ym = mes && /^\d{4}-\d{2}$/.test(mes) ? mes : this.mesAtual();
     const data = new Date(`${ym}-01T00:00:00.000Z`);
 
@@ -45,7 +45,7 @@ export class RecurringCostsService {
     }));
   }
 
-  async create(user: SupabaseUser, input: RecurringCostInput) {
+  async create(user: AuthUser, input: RecurringCostInput) {
     await this.assertProperty(user, input.propertyId);
     const fixo = await this.prisma.recurringCost.create({
       data: {
@@ -57,7 +57,7 @@ export class RecurringCostsService {
     return { id: fixo.id };
   }
 
-  async update(user: SupabaseUser, id: string, input: RecurringCostInput) {
+  async update(user: AuthUser, id: string, input: RecurringCostInput) {
     await this.assertOwnership(user, id);
     await this.assertProperty(user, input.propertyId);
     await this.prisma.recurringCost.update({
@@ -71,7 +71,7 @@ export class RecurringCostsService {
     return { id };
   }
 
-  async remove(user: SupabaseUser, id: string) {
+  async remove(user: AuthUser, id: string) {
     await this.assertOwnership(user, id);
     await this.prisma.recurringCost.delete({ where: { id } });
     return { ok: true };
@@ -84,7 +84,7 @@ export class RecurringCostsService {
     return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`;
   }
 
-  private async assertProperty(user: SupabaseUser, propertyId: string) {
+  private async assertProperty(user: AuthUser, propertyId: string) {
     const dono = await this.prisma.property.findFirst({
       where: { id: propertyId, userId: user.id },
       select: { id: true },
@@ -92,7 +92,7 @@ export class RecurringCostsService {
     if (!dono) throw new NotFoundException('Imóvel não encontrado.');
   }
 
-  private async assertOwnership(user: SupabaseUser, id: string) {
+  private async assertOwnership(user: AuthUser, id: string) {
     const fixo = await this.prisma.recurringCost.findFirst({
       where: { id, property: { userId: user.id } },
       select: { id: true },

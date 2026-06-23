@@ -1,0 +1,46 @@
+# Blueprint do Render — cria o banco + a API + o site de uma vez.
+# No Render: New + > Blueprint > aponte para este repositório.
+#
+# IMPORTANTE: depois do primeiro deploy, confira as URLs reais que o Render
+# gerou (em cada serviço). Se forem diferentes das abaixo, ajuste:
+#   - carias-api  -> variável WEB_ORIGIN do site (na verdade, do API) e
+#   - carias-web  -> variável NEXT_PUBLIC_API_URL
+# e mande "Manual Deploy" de novo.
+
+databases:
+  - name: carias-db
+    plan: free
+
+services:
+  # ---- API (NestJS + Prisma) ----
+  - type: web
+    name: carias-api
+    runtime: node
+    plan: free
+    healthCheckPath: /health
+    buildCommand: corepack enable && pnpm install && pnpm --filter @c-arias/api build && pnpm --filter @c-arias/api exec prisma migrate deploy
+    startCommand: pnpm --filter @c-arias/api start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: carias-db
+          property: connectionString
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        value: https://carias-web.onrender.com
+      - key: NODE_VERSION
+        value: "22"
+
+  # ---- Site (Next.js) ----
+  - type: web
+    name: carias-web
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install && pnpm --filter @c-arias/web build
+    startCommand: pnpm --filter @c-arias/web start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://carias-api.onrender.com
+      - key: NODE_VERSION
+        value: "22"

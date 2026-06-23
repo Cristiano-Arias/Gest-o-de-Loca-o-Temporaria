@@ -11,27 +11,27 @@ import {
 } from '@nestjs/common';
 import { RecurringCostsService } from './recurring-costs.service';
 import { RecurringCostInput } from './recurring-cost.dto';
-import { SupabaseAuthGuard, SupabaseUser } from '../auth/supabase-auth.guard';
+import { JwtAuthGuard, AuthUser } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 
 @Controller('recurring-costs')
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class RecurringCostsController {
   constructor(private readonly service: RecurringCostsService) {}
 
   @Get()
-  list(@CurrentUser() user: SupabaseUser, @Query('mes') mes?: string) {
+  list(@CurrentUser() user: AuthUser, @Query('mes') mes?: string) {
     return this.service.list(user, mes);
   }
 
   @Post()
-  create(@CurrentUser() user: SupabaseUser, @Body() dto: RecurringCostInput) {
+  create(@CurrentUser() user: AuthUser, @Body() dto: RecurringCostInput) {
     return this.service.create(user, dto);
   }
 
   @Patch(':id')
   update(
-    @CurrentUser() user: SupabaseUser,
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: RecurringCostInput,
   ) {
@@ -39,7 +39,7 @@ export class RecurringCostsController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: SupabaseUser, @Param('id') id: string) {
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.remove(user, id);
   }
 }

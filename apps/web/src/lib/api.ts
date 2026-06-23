@@ -1,10 +1,7 @@
 'use client';
 
-import { createClient } from '@/lib/supabase/client';
-import { supabaseConfigurado } from '@/lib/supabase/env';
-
-// Endereço da API (cérebro). Em produção vem do ambiente; local cai no 3333.
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
+import { API_URL } from '@/lib/config';
+import { getToken } from '@/lib/auth';
 
 // Erro de API com o código HTTP, para a tela reagir (ex.: 401 = login expirado).
 export class ApiError extends Error {
@@ -17,20 +14,12 @@ export class ApiError extends Error {
   }
 }
 
-// Pega o token de login do Supabase para autenticar a chamada na API.
-async function getToken(): Promise<string | null> {
-  if (!supabaseConfigurado) return null;
-  const supabase = createClient();
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const token = await getToken();
+  const token = getToken();
 
   let res: Response;
   try {

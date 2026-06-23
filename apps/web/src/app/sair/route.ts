@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { COOKIE_TOKEN } from '@/lib/config';
 
-// Encerra a sessão (logout) e volta para a tela de login.
-export async function GET(request: Request) {
+// Logout: apaga o cookie do token e volta para a tela de login.
+export function GET(request: Request) {
   const { origin } = new URL(request.url);
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  return NextResponse.redirect(`${origin}/entrar`);
+  const res = NextResponse.redirect(`${origin}/entrar`);
+  res.cookies.set(COOKIE_TOKEN, '', { maxAge: 0, path: '/' });
+  return res;
 }

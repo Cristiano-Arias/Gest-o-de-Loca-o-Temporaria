@@ -5,7 +5,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SupabaseUser } from '../auth/supabase-auth.guard';
+import { AuthUser } from '../auth/jwt-auth.guard';
 import { CostInput } from './cost.dto';
 
 const incluir = { property: true } satisfies Prisma.CostInclude;
@@ -19,7 +19,7 @@ export class CostsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(
-    user: SupabaseUser,
+    user: AuthUser,
     filtros: {
       propertyId?: string;
       categoria?: CostCategory;
@@ -39,7 +39,7 @@ export class CostsService {
     return custos.map((c) => this.toDTO(c));
   }
 
-  async create(user: SupabaseUser, input: CostInput) {
+  async create(user: AuthUser, input: CostInput) {
     await this.assertProperty(user, input.propertyId);
     const custo = await this.prisma.cost.create({
       data: {
@@ -55,7 +55,7 @@ export class CostsService {
     return this.toDTO(custo);
   }
 
-  async update(user: SupabaseUser, id: string, input: CostInput) {
+  async update(user: AuthUser, id: string, input: CostInput) {
     await this.assertOwnership(user, id);
     await this.assertProperty(user, input.propertyId);
     const custo = await this.prisma.cost.update({
@@ -73,7 +73,7 @@ export class CostsService {
     return this.toDTO(custo);
   }
 
-  async remove(user: SupabaseUser, id: string) {
+  async remove(user: AuthUser, id: string) {
     await this.assertOwnership(user, id);
     await this.prisma.cost.delete({ where: { id } });
     return { ok: true };
@@ -84,7 +84,7 @@ export class CostsService {
    * Idempotente: não duplica se já existir o mesmo (imóvel, categoria, mês)
    * marcado como "Custo fixo mensal". Espelha lancarFixos() do protótipo.
    */
-  async lancarFixos(user: SupabaseUser, propertyId?: string, mes?: string) {
+  async lancarFixos(user: AuthUser, propertyId?: string, mes?: string) {
     const ym = mes && /^\d{4}-\d{2}$/.test(mes) ? mes : this.mesAtual();
     const data = this.primeiroDia(ym);
 
@@ -135,7 +135,7 @@ export class CostsService {
     return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`;
   }
 
-  private async assertProperty(user: SupabaseUser, propertyId: string) {
+  private async assertProperty(user: AuthUser, propertyId: string) {
     const dono = await this.prisma.property.findFirst({
       where: { id: propertyId, userId: user.id },
       select: { id: true },
@@ -143,7 +143,7 @@ export class CostsService {
     if (!dono) throw new NotFoundException('Imóvel não encontrado.');
   }
 
-  private async assertOwnership(user: SupabaseUser, id: string) {
+  private async assertOwnership(user: AuthUser, id: string) {
     const custo = await this.prisma.cost.findFirst({
       where: { id, property: { userId: user.id } },
       select: { id: true },

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "SaaS C. Arias — Gestão de Locação por Temporada (monorepo)",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
