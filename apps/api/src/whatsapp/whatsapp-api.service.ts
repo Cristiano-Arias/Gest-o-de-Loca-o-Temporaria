@@ -11,10 +11,24 @@ import { Injectable, Logger } from '@nestjs/common';
 export class WhatsAppApiService {
   private readonly logger = new Logger(WhatsAppApiService.name);
 
+  /**
+   * Corrige o "nono dígito" do Brasil. A Meta às vezes entrega o número do
+   * remetente sem o 9 (55 + DDD + 8 dígitos = 12). Para enviar/casar com a
+   * lista de permitidos, inserimos o 9 após o DDD → 55 + DDD + 9 + 8 = 13.
+   */
+  private normalizarBR(numero: string): string {
+    const d = (numero || '').replace(/\D/g, '');
+    if (d.startsWith('55') && d.length === 12) {
+      return d.slice(0, 4) + '9' + d.slice(4);
+    }
+    return d;
+  }
+
   async sendText(to: string, body: string): Promise<void> {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_ID;
     const versao = process.env.WHATSAPP_API_VER || 'v21.0';
+    const destino = this.normalizarBR(to);
 
     if (!token || !phoneId) {
       this.logger.warn(
@@ -33,7 +47,7 @@ export class WhatsAppApiService {
         },
         body: JSON.stringify({
           messaging_product: 'whatsapp',
-          to,
+          to: destino,
           type: 'text',
           text: { body },
         }),
@@ -42,7 +56,7 @@ export class WhatsAppApiService {
         const txt = await res.text();
         this.logger.error(`Falha ao enviar WhatsApp (${res.status}): ${txt}`);
       } else {
-        this.logger.log(`Resposta enviada para ${to}.`);
+        this.logger.log(`Resposta enviada para ${destino}.`);
       }
     } catch (e) {
       this.logger.error(`Erro de rede ao enviar WhatsApp: ${String(e)}`);
