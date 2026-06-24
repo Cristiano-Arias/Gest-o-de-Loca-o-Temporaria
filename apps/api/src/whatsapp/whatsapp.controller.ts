@@ -38,9 +38,12 @@ export class WhatsAppController {
       const value = body?.entry?.[0]?.changes?.[0]?.value;
       const mensagens = value?.messages ?? [];
       for (const msg of mensagens) {
-        if (msg?.type === 'text' && msg?.text?.body && msg?.from) {
-          // Não esperamos terminar: respondemos 200 rápido e processamos depois.
+        if (!msg?.from) continue;
+        // Não esperamos terminar: respondemos 200 rápido e processamos depois.
+        if (msg.type === 'text' && msg.text?.body) {
           void this.service.processarTexto(msg.from, msg.text.body);
+        } else if (msg.type === 'document' && msg.document) {
+          void this.service.processarDocumento(msg.from, msg.document);
         }
       }
     } catch {

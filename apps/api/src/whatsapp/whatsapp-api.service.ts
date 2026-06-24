@@ -46,4 +46,44 @@ export class WhatsAppApiService {
       this.logger.error(`Erro de rede ao enviar WhatsApp: ${String(e)}`);
     }
   }
+
+  /**
+   * Baixa um anexo (mídia) recebido. A Meta exige 2 passos:
+   *  1) GET /{media_id}      -> devolve a URL temporária do arquivo;
+   *  2) GET nessa URL (com o token) -> bytes do arquivo.
+   * Retorna o conteúdo como Buffer, ou null em caso de falha.
+   */
+  async baixarMidia(mediaId: string): Promise<Buffer | null> {
+    const token = process.env.WHATSAPP_TOKEN;
+    const versao = process.env.WHATSAPP_API_VER || 'v21.0';
+    if (!token) {
+      this.logger.warn('WHATSAPP_TOKEN ausente — não dá para baixar mídia.');
+      return null;
+    }
+    try {
+      const metaRes = await fetch(
+        `https://graph.facebook.com/${versao}/${mediaId}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!metaRes.ok) {
+        this.logger.error(`Falha ao obter URL da mídia (${metaRes.status}).`);
+        return null;
+      }
+      const meta = (await metaRes.json()) as { url?: string };
+      if (!meta.url) return null;
+
+      const arqRes = await fetch(meta.url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!arqRes.ok) {
+        this.logger.error(`Falha ao baixar mídia (${arqRes.status}).`);
+        return null;
+      }
+      const ab = await arqRes.arrayBuffer();
+      return Buffer.from(ab);
+    } catch (e) {
+      this.logger.error(`Erro ao baixar mídia: ${String(e)}`);
+      return null;
+    }
+  }
 }
