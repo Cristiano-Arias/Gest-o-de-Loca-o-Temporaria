@@ -31,7 +31,7 @@ export function BarrasVerticais({
   return (
     <div className="flex h-44 items-end gap-1.5">
       {valores.map((v, i) => (
-        <div key={i} className="flex flex-1 flex-col items-center gap-1">
+        <div key={i} className="flex h-full flex-1 flex-col items-center gap-1">
           <div className="flex w-full flex-1 items-end">
             <div
               title={brl(v)}
