@@ -58,8 +58,10 @@ export class WhatsAppService {
    */
   async processarTexto(from: string, texto: string): Promise<void> {
     try {
+      this.logger.log(`Processando texto de ${from}: "${texto}"`);
       const user = await this.encontrarUsuario(from);
       if (!user) {
+        this.logger.warn(`Usuário não encontrado para ${from}.`);
         await this.wa.sendText(
           from,
           'Olá! Seu número ainda não está vinculado a uma conta C. Arias. ' +
@@ -85,6 +87,7 @@ export class WhatsAppService {
       }
 
       const resultado = await this.router.route(texto);
+      this.logger.log(`Intenção detectada: ${resultado.intencao}`);
 
       switch (resultado.intencao) {
         case 'LANCAR_CUSTO':

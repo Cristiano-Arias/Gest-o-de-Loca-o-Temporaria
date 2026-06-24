@@ -41,6 +41,8 @@ export class WhatsAppApiService {
       if (!res.ok) {
         const txt = await res.text();
         this.logger.error(`Falha ao enviar WhatsApp (${res.status}): ${txt}`);
+      } else {
+        this.logger.log(`Resposta enviada para ${to}.`);
       }
     } catch (e) {
       this.logger.error(`Erro de rede ao enviar WhatsApp: ${String(e)}`);
