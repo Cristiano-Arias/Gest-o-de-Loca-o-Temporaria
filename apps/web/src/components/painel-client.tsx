@@ -20,6 +20,7 @@ import {
   periodoRange,
   calcMetricas,
   calcFutura,
+  receitaPorSituacao,
   anosComDados,
   ranking,
   ultimos12,
@@ -87,7 +88,11 @@ export function PainelClient() {
       ini,
       fim,
     );
-    return { ...base, futura: calcFutura(reservas, filtroImovel) };
+    return {
+      ...base,
+      futura: calcFutura(reservas, filtroImovel),
+      situacao: receitaPorSituacao(reservas, filtroImovel, ini, fim),
+    };
   }, [periodo, reservas, custos, imoveis, filtroImovel]);
 
   const rankingDados = useMemo(
@@ -248,6 +253,33 @@ export function PainelClient() {
             />
           </div>
 
+          {/* receita líquida por situação */}
+          <div className="mb-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <SituacaoCard
+              cor="#2f9e6f"
+              rotulo="Concluída"
+              valor={brl(m.situacao.concluida)}
+              nota="hospedagens finalizadas"
+            />
+            <SituacaoCard
+              cor="#28727c"
+              rotulo="Em andamento"
+              valor={brl(m.situacao.andamento)}
+              nota="hóspede na casa agora"
+            />
+            <SituacaoCard
+              cor="#e9a13b"
+              rotulo="Futura"
+              valor={brl(m.situacao.futura)}
+              nota="confirmadas, a realizar"
+            />
+          </div>
+          <p className="mb-6 text-xs text-tinta-suave">
+            Os indicadores acima consideram todas as reservas do período, exceto
+            canceladas. Esta faixa mostra quanto já se realizou e quanto ainda
+            está por vir (os três somam a Receita líquida).
+          </p>
+
           {/* ranking de imóveis */}
           {temRanking ? (
             <Secao titulo="Ranking de imóveis">
@@ -393,6 +425,38 @@ function Kpi({
         {valor}
       </div>
       <div className="mt-0.5 text-xs text-tinta-suave">{nota || ' '}</div>
+    </div>
+  );
+}
+
+// Quadro da faixa "Receita líquida por situação", com faixa colorida no topo.
+function SituacaoCard({
+  cor,
+  rotulo,
+  valor,
+  nota,
+}: {
+  cor: string;
+  rotulo: string;
+  valor: string;
+  nota: string;
+}) {
+  return (
+    <div
+      className="rounded-carias border border-borda bg-superficie p-4 shadow-carias"
+      style={{ borderTop: `4px solid ${cor}` }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-full"
+          style={{ backgroundColor: cor }}
+        />
+        <span className="text-xs font-medium text-tinta-suave">{rotulo}</span>
+      </div>
+      <div className="mt-1 font-display text-2xl font-semibold text-tinta">
+        {valor}
+      </div>
+      <div className="mt-0.5 text-xs text-tinta-suave">{nota}</div>
     </div>
   );
 }

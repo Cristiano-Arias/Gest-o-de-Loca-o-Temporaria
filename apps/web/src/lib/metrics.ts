@@ -169,6 +169,39 @@ export function calcMetricas(
   };
 }
 
+// Receita líquida do período separada por situação (somam a receitaLiquida).
+// Concluída = FINALIZADA · Em andamento = HOSPEDADO · Futura = CONFIRMADA/PENDENTE.
+export type ReceitaSituacao = {
+  concluida: number;
+  andamento: number;
+  futura: number;
+};
+
+export function receitaPorSituacao(
+  reservas: ReservaMetrica[],
+  filtroImovel: string,
+  ini: Date,
+  fim: Date,
+): ReceitaSituacao {
+  const res = reservas.filter(
+    (r) =>
+      r.kind === 'BOOKING' &&
+      r.status !== 'CANCELADA' &&
+      (!filtroImovel || r.propertyId === filtroImovel) &&
+      parseISO(r.checkin) <= fim &&
+      parseISO(r.checkout) >= ini,
+  );
+  let concluida = 0;
+  let andamento = 0;
+  let futura = 0;
+  for (const r of res) {
+    if (r.status === 'FINALIZADA') concluida += r.valorLiquido;
+    else if (r.status === 'HOSPEDADO') andamento += r.valorLiquido;
+    else futura += r.valorLiquido; // CONFIRMADA, PENDENTE
+  }
+  return { concluida, andamento, futura };
+}
+
 // Receita futura: reservas confirmadas/pendentes com check-in a partir de amanhã.
 export function calcFutura(
   reservas: ReservaMetrica[],
