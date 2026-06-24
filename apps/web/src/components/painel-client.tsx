@@ -379,8 +379,13 @@ export function PainelClient() {
 
           {/* gráficos */}
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CartaoGrafico titulo="Receita por mês (12 meses)">
-              <BarrasVerticais labels={labels} valores={serieReceita} />
+            <CartaoGrafico titulo="Receita por mês — por check-out (12 meses)">
+              <BarrasVerticais
+                labels={labels}
+                valores={serieReceita}
+                mostrarValores
+                tendencia
+              />
             </CartaoGrafico>
             <CartaoGrafico titulo="Receita por plataforma">
               <Rosca

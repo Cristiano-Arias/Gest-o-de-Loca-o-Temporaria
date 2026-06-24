@@ -73,6 +73,8 @@ export function ReservasClient() {
   const [erro, setErro] = useState<string | null>(null);
   const [filtroImovel, setFiltroImovel] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
+  const [coDe, setCoDe] = useState(''); // check-out de (AAAA-MM-DD)
+  const [coAte, setCoAte] = useState(''); // check-out até
 
   const [modal, setModal] = useState<'reserva' | 'bloqueio' | null>(null);
   const [importAberto, setImportAberto] = useState(false);
@@ -139,10 +141,24 @@ export function ReservasClient() {
     const arr = reservas.filter(
       (r) =>
         (!filtroImovel || r.propertyId === filtroImovel) &&
-        (!filtroStatus || r.status === filtroStatus),
+        (!filtroStatus || r.status === filtroStatus) &&
+        // Intervalo por data de CHECK-OUT (como as plataformas contabilizam).
+        (!coDe || r.checkout >= coDe) &&
+        (!coAte || r.checkout <= coAte),
     );
     return [...arr].sort((a, b) => (a.checkin < b.checkin ? 1 : -1));
-  }, [reservas, filtroImovel, filtroStatus]);
+  }, [reservas, filtroImovel, filtroStatus, coDe, coAte]);
+
+  // Totais da lista filtrada (bloqueios entram com valor zero).
+  const totais = useMemo(
+    () => ({
+      qtd: lista.length,
+      liquido: lista.reduce((s, r) => s + r.valorLiquido, 0),
+      bruto: lista.reduce((s, r) => s + r.valorBruto, 0),
+      noites: lista.reduce((s, r) => s + r.noites, 0),
+    }),
+    [lista],
+  );
 
   // Receita futura contratada: reservas (não bloqueio) ativas com check-out futuro.
   const futuros = useMemo(() => {
@@ -379,6 +395,48 @@ export function ReservasClient() {
                 ))}
               </select>
             ) : null}
+          </div>
+
+          {/* filtro por intervalo de check-out + totais do filtro */}
+          <div className="mb-5 flex flex-wrap items-end gap-3">
+            <label className="text-xs font-medium text-tinta-suave">
+              Check-out de
+              <input
+                type="date"
+                value={coDe}
+                onChange={(e) => setCoDe(e.target.value)}
+                className="mt-1 block rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+              />
+            </label>
+            <label className="text-xs font-medium text-tinta-suave">
+              até
+              <input
+                type="date"
+                value={coAte}
+                onChange={(e) => setCoAte(e.target.value)}
+                className="mt-1 block rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+              />
+            </label>
+            {coDe || coAte ? (
+              <button
+                onClick={() => {
+                  setCoDe('');
+                  setCoAte('');
+                }}
+                className="rounded-lg border border-borda-forte px-3 py-2 text-sm font-medium text-tinta hover:bg-areia"
+              >
+                Limpar datas
+              </button>
+            ) : null}
+            <div className="ml-auto rounded-carias border border-borda bg-superficie px-4 py-2.5 text-sm shadow-carias">
+              <span className="text-tinta-suave">Total filtrado:</span>{' '}
+              <strong className="text-tinta">{totais.qtd}</strong> registro(s) ·{' '}
+              <span className="text-tinta-suave">Líquido</span>{' '}
+              <strong className="text-tinta">{brl(totais.liquido)}</strong> ·{' '}
+              <span className="text-tinta-suave">Bruto</span>{' '}
+              <strong className="text-tinta">{brl(totais.bruto)}</strong> ·{' '}
+              <strong className="text-tinta">{totais.noites}</strong> noite(s)
+            </div>
           </div>
 
           {/* receita futura contratada */}

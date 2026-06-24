@@ -14,6 +14,16 @@ export function brlc(n: number | null | undefined): string {
   });
 }
 
+// Valor compacto e curto para rótulos de gráfico: 1546 -> "1,5k"; 12000 -> "12k".
+export function brlCompacto(n: number | null | undefined): string {
+  const v = Number(n) || 0;
+  if (Math.abs(v) >= 1_000_000)
+    return (v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'M';
+  if (Math.abs(v) >= 1000)
+    return (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'k';
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+}
+
 // Percentual com uma casa: 12.34 -> "12,3%". Espelha pct() do protótipo.
 export function pct(n: number | null | undefined): string {
   return (

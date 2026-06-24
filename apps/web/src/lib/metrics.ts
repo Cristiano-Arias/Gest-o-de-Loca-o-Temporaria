@@ -308,10 +308,11 @@ export function receitaPorMes(
   meses: Mes12[],
 ): number[] {
   const ativas = reservasAtivas(reservas, filtroImovel);
+  // Agrupado pelo mês de CHECK-OUT (como as plataformas contabilizam o mês).
   return meses.map((mm) =>
     ativas
       .filter((r) => {
-        const c = parseISO(r.checkin);
+        const c = parseISO(r.checkout);
         return c.getFullYear() === mm.ano && c.getMonth() === mm.mes;
       })
       .reduce((s, r) => s + r.valorLiquido, 0),

@@ -3,7 +3,7 @@
 // Gráficos leves feitos só com SVG/CSS — sem bibliotecas externas.
 // Reproduzem os 4 gráficos do Painel do protótipo.
 
-import { brl, pct } from '@/lib/format';
+import { brl, pct, brlCompacto } from '@/lib/format';
 
 const PALETA = ['#e07a5f', '#28727c', '#2f9e6f', '#e9a13b', '#5b4486'];
 
@@ -15,37 +15,104 @@ function SemDados() {
   );
 }
 
-// Barras verticais (ex.: receita por mês). Valores em moeda.
-// `cores` opcional define a cor de cada barra (senão usa a cor do mar).
+// Barras verticais em SVG (ex.: receita por mês).
+// - passe o mouse numa barra para ver o valor cheio (tooltip);
+// - `mostrarValores` escreve o valor (curto) acima de cada barra;
+// - `tendencia` desenha a linha de tendência (regressão linear).
 export function BarrasVerticais({
   labels,
   valores,
   cores,
+  mostrarValores,
+  tendencia,
 }: {
   labels: string[];
   valores: number[];
   cores?: string[];
+  mostrarValores?: boolean;
+  tendencia?: boolean;
 }) {
-  const max = Math.max(...valores, 1);
   if (!valores.some((v) => v > 0)) return <SemDados />;
+  const max = Math.max(...valores, 1);
+  const W = 360;
+  const H = 180;
+  const padT = 16;
+  const padB = 20;
+  const padX = 6;
+  const n = valores.length;
+  const slot = (W - padX * 2) / n;
+  const barW = Math.min(slot * 0.62, 36);
+  const area = H - padT - padB;
+  const cx = (i: number) => padX + slot * i + slot / 2;
+  const alturaBarra = (v: number) => (v / max) * area;
+  const topo = (v: number) => padT + (area - alturaBarra(v));
+
+  // Linha de tendência (mínimos quadrados sobre os índices 0..n-1).
+  let pontosTendencia = '';
+  if (tendencia && n > 1) {
+    const sx = valores.reduce((a, _v, i) => a + i, 0);
+    const sy = valores.reduce((a, v) => a + v, 0);
+    const sxy = valores.reduce((a, v, i) => a + i * v, 0);
+    const sxx = valores.reduce((a, _v, i) => a + i * i, 0);
+    const den = n * sxx - sx * sx;
+    const slope = den !== 0 ? (n * sxy - sx * sy) / den : 0;
+    const intercept = (sy - slope * sx) / n;
+    const yLinha = (i: number) => {
+      const val = Math.max(0, Math.min(max, intercept + slope * i));
+      return padT + (area - (val / max) * area);
+    };
+    pontosTendencia = `${cx(0)},${yLinha(0)} ${cx(n - 1)},${yLinha(n - 1)}`;
+  }
+
   return (
-    <div className="flex h-44 items-end gap-1.5">
-      {valores.map((v, i) => (
-        <div key={i} className="flex h-full flex-1 flex-col items-center gap-1">
-          <div className="flex w-full flex-1 items-end">
-            <div
-              title={brl(v)}
-              className={`w-full rounded-t ${cores ? '' : 'bg-mar'}`}
-              style={{
-                height: `${(v / max) * 100}%`,
-                minHeight: v > 0 ? 2 : 0,
-                backgroundColor: cores ? cores[i] : undefined,
-              }}
-            />
-          </div>
-          <span className="text-[10px] text-tinta-suave">{labels[i]}</span>
-        </div>
-      ))}
+    <div className="h-44">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
+        {valores.map((v, i) => (
+          <g key={i}>
+            {v > 0 ? (
+              <rect
+                x={cx(i) - barW / 2}
+                y={topo(v)}
+                width={barW}
+                height={alturaBarra(v)}
+                rx={3}
+                fill={cores ? cores[i] : '#28727c'}
+              >
+                <title>{`${labels[i]}: ${brl(v)}`}</title>
+              </rect>
+            ) : null}
+            {mostrarValores && v > 0 ? (
+              <text
+                x={cx(i)}
+                y={topo(v) - 3}
+                textAnchor="middle"
+                fontSize={8}
+                fill="#4c6a70"
+              >
+                {brlCompacto(v)}
+              </text>
+            ) : null}
+            <text
+              x={cx(i)}
+              y={H - 6}
+              textAnchor="middle"
+              fontSize={9}
+              fill="#4c6a70"
+            >
+              {labels[i]}
+            </text>
+          </g>
+        ))}
+        {tendencia && pontosTendencia ? (
+          <polyline
+            points={pontosTendencia}
+            fill="none"
+            stroke="#e07a5f"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+          />
+        ) : null}
+      </svg>
     </div>
   );
 }
