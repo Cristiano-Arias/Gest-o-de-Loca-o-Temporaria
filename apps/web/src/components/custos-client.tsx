@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
+import { CustosFixosModal } from '@/components/custos-fixos-modal';
 import { api, ApiError } from '@/lib/api';
 import { brl, brMesAno } from '@/lib/format';
 import { CATEGORIAS, catLabel, PAGOS, statusLabel } from '@/lib/constants';
@@ -54,6 +55,7 @@ export function CustosClient() {
   const [form, setForm] = useState<FormCusto | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [lancando, setLancando] = useState(false);
+  const [fixosAberto, setFixosAberto] = useState(false);
 
   const [toast, setToast] = useState<{ msg: string; erro: boolean } | null>(
     null,
@@ -252,6 +254,12 @@ export function CustosClient() {
             >
               {lancando ? 'Lançando…' : 'Lançar custos fixos do mês'}
             </button>
+            <button
+              onClick={() => setFixosAberto(true)}
+              className="rounded-lg border border-borda-forte px-4 py-2 text-sm font-medium text-tinta hover:bg-areia"
+            >
+              Custos fixos
+            </button>
 
             {imoveis.length > 1 ? (
               <select
@@ -322,6 +330,14 @@ export function CustosClient() {
           salvando={salvando}
           onFechar={fechar}
           onSalvar={salvar}
+        />
+      ) : null}
+
+      {fixosAberto ? (
+        <CustosFixosModal
+          imoveis={imoveis}
+          onFechar={() => setFixosAberto(false)}
+          onMudou={carregar}
         />
       ) : null}
 
