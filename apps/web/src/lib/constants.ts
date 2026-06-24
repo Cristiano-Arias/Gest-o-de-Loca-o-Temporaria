@@ -39,3 +39,21 @@ export function statusLabel(value: string): string {
 
 // Status de pagamento de um custo (espelha PAGOS do protótipo).
 export const PAGOS = ['PENDENTE', 'PAGO', 'ATRASADO'] as const;
+
+// Tipo de uso do imóvel: temporada (diárias) ou longo prazo (aluguel mensal).
+export const TIPOS_IMOVEL: { value: string; label: string }[] = [
+  { value: 'TEMPORADA', label: 'Temporada (diárias)' },
+  { value: 'LONGO_PRAZO', label: 'Longo prazo (aluguel mensal)' },
+];
+
+export function tipoImovelLabel(value: string): string {
+  return TIPOS_IMOVEL.find((t) => t.value === value)?.label ?? 'Temporada';
+}
+
+// Situação de uma mensalidade de aluguel.
+export function situacaoAluguelLabel(value: string): string {
+  if (value === 'PAGO') return 'Pago';
+  if (value === 'ATRASADO') return 'Atrasado';
+  if (value === 'EM_ABERTO') return 'Em aberto';
+  return value;
+}

@@ -10,7 +10,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { CostCategory } from '@prisma/client';
+import { CostCategory, PropertyType } from '@prisma/client';
 
 // Uma linha de custo fixo mensal do imóvel (sem dia de vencimento — decisão do protótipo).
 export class RecurringCostInput {
@@ -29,6 +29,10 @@ export class PropertyInput {
   @IsString()
   @MaxLength(200)
   nome!: string;
+
+  @IsOptional()
+  @IsEnum(PropertyType)
+  tipo?: PropertyType; // TEMPORADA (padrão) ou LONGO_PRAZO
 
   @IsOptional()
   @IsString()

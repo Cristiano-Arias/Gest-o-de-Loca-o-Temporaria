@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { api, ApiError } from '@/lib/api';
 import { brl } from '@/lib/format';
-import { PLATAFORMAS, CATEGORIAS, catLabel } from '@/lib/constants';
+import { PLATAFORMAS, CATEGORIAS, TIPOS_IMOVEL } from '@/lib/constants';
 
 // --- tipos -------------------------------------------------------------
 
@@ -13,6 +13,7 @@ type CustoFixo = { categoria: string; valorMensal: number };
 type Imovel = {
   id: string;
   nome: string;
+  tipo: string;
   endereco: string | null;
   capacidade: number;
   checkin: string | null;
@@ -28,6 +29,7 @@ type LinhaFixo = { categoria: string; valor: string };
 
 type FormState = {
   nome: string;
+  tipo: string;
   endereco: string;
   capacidade: string;
   checkin: string;
@@ -40,6 +42,7 @@ type FormState = {
 
 const FORM_VAZIO: FormState = {
   nome: '',
+  tipo: 'TEMPORADA',
   endereco: '',
   capacidade: '2',
   checkin: '15:00',
@@ -104,6 +107,7 @@ export function ImoveisClient() {
     setEditandoId(p.id);
     setForm({
       nome: p.nome,
+      tipo: p.tipo ?? 'TEMPORADA',
       endereco: p.endereco ?? '',
       capacidade: String(p.capacidade ?? 2),
       checkin: p.checkin ?? '15:00',
@@ -172,6 +176,7 @@ export function ImoveisClient() {
 
     const payload = {
       nome,
+      tipo: form.tipo,
       endereco: form.endereco.trim(),
       capacidade: Number(form.capacidade) || 2,
       checkin: form.checkin,
@@ -336,7 +341,20 @@ function CardImovel({
 
   return (
     <div className="flex flex-col rounded-carias border border-borda bg-superficie p-5 shadow-carias">
-      <h3 className="font-display text-lg font-semibold text-tinta">{p.nome}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-display text-lg font-semibold text-tinta">
+          {p.nome}
+        </h3>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            p.tipo === 'LONGO_PRAZO'
+              ? 'bg-[#ece4f6] text-[#5b4486]'
+              : 'bg-areia text-mar'
+          }`}
+        >
+          {p.tipo === 'LONGO_PRAZO' ? 'Longo prazo' : 'Temporada'}
+        </span>
+      </div>
       <div className="mt-0.5 text-sm text-tinta-suave">
         {p.endereco || 'Sem endereço'}
       </div>
@@ -455,6 +473,27 @@ function ModalImovel({
               }
               placeholder="Ex: Apto Wai Wai Cumbuco"
             />
+          </div>
+
+          <div>
+            <label className={rotulo}>Tipo de uso *</label>
+            <select
+              className={campo}
+              value={form.tipo}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, tipo: e.target.value }))
+              }
+            >
+              {TIPOS_IMOVEL.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-tinta-suave">
+              “Temporada” usa reservas por diária. “Longo prazo” usa contratos e
+              aluguel mensal (aba Aluguéis).
+            </p>
           </div>
 
           <div>

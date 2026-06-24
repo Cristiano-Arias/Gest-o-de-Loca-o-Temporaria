@@ -11,6 +11,7 @@ export function middleware(request: NextRequest) {
     path.startsWith('/painel') ||
     path.startsWith('/imoveis') ||
     path.startsWith('/reservas') ||
+    path.startsWith('/alugueis') ||
     path.startsWith('/agenda') ||
     path.startsWith('/custos') ||
     path.startsWith('/plataformas');

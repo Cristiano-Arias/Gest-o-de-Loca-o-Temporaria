@@ -25,6 +25,25 @@ enum ReservationKind {
   BLOCK       // bloqueio (manutenção, uso próprio)
 }
 
+// Tipo de uso do imóvel: aluguel por temporada (diárias) ou locação de longo prazo (mensal).
+enum PropertyType {
+  TEMPORADA
+  LONGO_PRAZO
+}
+
+// Situação de um contrato de locação de longo prazo.
+enum LeaseStatus {
+  ATIVO
+  ENCERRADO
+}
+
+// Situação de uma mensalidade (aluguel do mês). ATRASADO é calculado na hora
+// (em aberto + vencimento já passou); guardamos só PAGO ou EM_ABERTO.
+enum RentStatus {
+  EM_ABERTO
+  PAGO
+}
+
 enum ReservationStatus {
   PENDENTE
   CONFIRMADA
@@ -178,27 +197,82 @@ model Platform {
 }
 
 model Property {
-  id            String  @id @default(uuid())
+  id            String       @id @default(uuid())
   userId        String
   nome          String
+  tipo          PropertyType @default(TEMPORADA)
   endereco      String?
-  capacidade    Int     @default(2)
-  checkinPadrao String? @default("15:00") // HH:mm
-  checkoutPadrao String? @default("11:00")
-  taxaLimpeza   Decimal @default(0) @db.Decimal(10, 2)
+  capacidade    Int          @default(2)
+  checkinPadrao String?      @default("15:00") // HH:mm
+  checkoutPadrao String?     @default("11:00")
+  taxaLimpeza   Decimal      @default(0) @db.Decimal(10, 2)
   observacoes   String?
-  ativo         Boolean @default(true)
+  ativo         Boolean      @default(true)
 
   user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   listings      PropertyListing[]
   reservations  Reservation[]
   costs         Cost[]
   recurringCosts RecurringCost[]
+  leases        Lease[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   @@index([userId])
+}
+
+// Contrato de locação de longo prazo (inquilino que mora no imóvel e paga aluguel mensal).
+model Lease {
+  id               String      @id @default(uuid())
+  propertyId       String
+  inquilinoNome    String
+  inquilinoTelefone String?
+  inquilinoEmail   String?
+  inquilinoDocumento String?   // CPF
+  valorMensal      Decimal     @db.Decimal(10, 2) // aluguel base
+  outrosCustos     Decimal     @default(0) @db.Decimal(10, 2) // condomínio etc. cobrado junto
+  outrosCustosDescricao String?
+  diaVencimento    Int         @default(5) // dia do mês (1..28)
+  inicio           DateTime    @db.Date
+  fim              DateTime?   @db.Date // vazio = contrato em vigência (sem prazo definido)
+  // Flags informativos: o que já está incluso no aluguel.
+  incluiInternet   Boolean     @default(false)
+  incluiAgua       Boolean     @default(false)
+  incluiEnergia    Boolean     @default(false)
+  observacoes      String?
+  status           LeaseStatus @default(ATIVO)
+
+  property     Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  installments RentInstallment[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([status])
+}
+
+// Mensalidade: o aluguel de um mês específico de um contrato (a "régua" de pagamentos).
+model RentInstallment {
+  id          String     @id @default(uuid())
+  leaseId     String
+  competencia DateTime   @db.Date // 1º dia do mês de referência
+  vencimento  DateTime   @db.Date
+  valor       Decimal    @db.Decimal(10, 2) // aluguel + outros custos do mês
+  status      RentStatus @default(EM_ABERTO)
+  pagoEm      DateTime?  @db.Date
+  observacoes String?
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Idempotência: uma mensalidade por mês por contrato.
+  @@unique([leaseId, competencia])
+  @@index([leaseId])
+  @@index([status])
 }
 
 // N:N entre Imóvel e Plataforma (mesmo imóvel anunciado em vários canais)

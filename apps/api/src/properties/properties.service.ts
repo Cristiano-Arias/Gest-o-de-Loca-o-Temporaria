@@ -58,6 +58,7 @@ export class PropertiesService {
       data: {
         userId,
         nome: input.nome.trim(),
+        tipo: input.tipo ?? 'TEMPORADA',
         endereco: input.endereco?.trim() || null,
         capacidade: input.capacidade ?? 2,
         checkinPadrao: input.checkin || '15:00',
@@ -77,6 +78,7 @@ export class PropertiesService {
       where: { id },
       data: {
         nome: input.nome.trim(),
+        tipo: input.tipo ?? 'TEMPORADA',
         endereco: input.endereco?.trim() || null,
         capacidade: input.capacidade ?? 2,
         checkinPadrao: input.checkin || '15:00',
@@ -176,6 +178,7 @@ export class PropertiesService {
     return {
       id: p.id,
       nome: p.nome,
+      tipo: p.tipo,
       endereco: p.endereco,
       capacidade: p.capacidade,
       checkin: p.checkinPadrao,

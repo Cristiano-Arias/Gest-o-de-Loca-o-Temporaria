@@ -9,6 +9,7 @@ import { ReservationsModule } from './reservations/reservations.module';
 import { CostsModule } from './costs/costs.module';
 import { RecurringCostsModule } from './recurring-costs/recurring-costs.module';
 import { ImportModule } from './import/import.module';
+import { LeasesModule } from './leases/leases.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ImportModule } from './import/import.module';
     CostsModule,
     RecurringCostsModule,
     ImportModule,
+    LeasesModule,
   ],
   controllers: [HealthController],
 })
