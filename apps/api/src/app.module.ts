@@ -10,6 +10,7 @@ import { CostsModule } from './costs/costs.module';
 import { RecurringCostsModule } from './recurring-costs/recurring-costs.module';
 import { ImportModule } from './import/import.module';
 import { LeasesModule } from './leases/leases.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { LeasesModule } from './leases/leases.module';
     RecurringCostsModule,
     ImportModule,
     LeasesModule,
+    WhatsAppModule,
   ],
   controllers: [HealthController],
 })
