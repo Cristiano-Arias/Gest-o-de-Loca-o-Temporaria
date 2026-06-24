@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { WhatsAppService } from './whatsapp.service';
+import { WhatsAppApiService } from './whatsapp-api.service';
 
 /**
  * Webhook da WhatsApp Cloud API (Meta).
@@ -19,7 +20,17 @@ import { WhatsAppService } from './whatsapp.service';
 export class WhatsAppController {
   private readonly logger = new Logger(WhatsAppController.name);
 
-  constructor(private readonly service: WhatsAppService) {}
+  constructor(
+    private readonly service: WhatsAppService,
+    private readonly api: WhatsAppApiService,
+  ) {}
+
+  // Inscreve o app nos webhooks da WABA. Abrir uma vez no navegador.
+  @Get('subscribe')
+  subscribe() {
+    this.logger.log('Disparando inscrição na WABA (subscribed_apps)...');
+    return this.api.subscribeWaba();
+  }
 
   @Get()
   verify(

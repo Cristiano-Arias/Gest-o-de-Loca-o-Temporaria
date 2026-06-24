@@ -88,4 +88,31 @@ export class WhatsAppApiService {
       return null;
     }
   }
+
+  /**
+   * Inscreve este app nos webhooks da Conta do WhatsApp Business (WABA),
+   * para que as mensagens reais sejam entregues ao nosso webhook.
+   * Equivale a: POST /{WABA_ID}/subscribed_apps  (com o token do app).
+   */
+  async subscribeWaba(): Promise<{ ok: boolean; detalhe: string }> {
+    const token = process.env.WHATSAPP_TOKEN;
+    const waba = process.env.WHATSAPP_WABA_ID;
+    const versao = process.env.WHATSAPP_API_VER || 'v21.0';
+    if (!token) return { ok: false, detalhe: 'WHATSAPP_TOKEN ausente' };
+    if (!waba) return { ok: false, detalhe: 'WHATSAPP_WABA_ID ausente' };
+
+    const url = `https://graph.facebook.com/${versao}/${waba}/subscribed_apps`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const txt = await res.text();
+      this.logger.log(`subscribed_apps (${res.status}): ${txt}`);
+      return { ok: res.ok, detalhe: `${res.status} ${txt}` };
+    } catch (e) {
+      this.logger.error(`Erro ao inscrever WABA: ${String(e)}`);
+      return { ok: false, detalhe: String(e) };
+    }
+  }
 }
