@@ -3,6 +3,10 @@ import { CostCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntentRouterService } from './intent-router.service';
 import { WhatsAppApiService } from './whatsapp-api.service';
+import { ImportService } from '../import/import.service';
+
+// Limite defensivo do anexo guardado no estado da conversa (relatórios são pequenos).
+const MAX_ARQUIVO_BYTES = 6 * 1024 * 1024; // 6 MB
 
 const CATEGORIAS_VALIDAS = new Set<string>([
   'LIMPEZA', 'CONDOMINIO', 'IPTU', 'ENERGIA', 'AGUA', 'GAS', 'INTERNET',
@@ -45,6 +49,7 @@ export class WhatsAppService {
     private readonly prisma: PrismaService,
     private readonly router: IntentRouterService,
     private readonly wa: WhatsAppApiService,
+    private readonly importer: ImportService,
   ) {}
 
   /**
@@ -53,8 +58,10 @@ export class WhatsAppService {
    */
   async processarTexto(from: string, texto: string): Promise<void> {
     try {
+      this.logger.log(`Processando texto de ${from}: "${texto}"`);
       const user = await this.encontrarUsuario(from);
       if (!user) {
+        this.logger.warn(`Usuário não encontrado para ${from}.`);
         await this.wa.sendText(
           from,
           'Olá! Seu número ainda não está vinculado a uma conta C. Arias. ' +
@@ -80,6 +87,7 @@ export class WhatsAppService {
       }
 
       const resultado = await this.router.route(texto);
+      this.logger.log(`Intenção detectada: ${resultado.intencao}`);
 
       switch (resultado.intencao) {
         case 'LANCAR_CUSTO':
@@ -112,6 +120,89 @@ export class WhatsAppService {
       } catch {
         // ignora
       }
+    }
+  }
+
+  /**
+   * Processa um documento (anexo) recebido: relatório padrão do Airbnb (.csv)
+   * ou Booking (.xls/.xlsx). Baixa, guarda no estado e pede confirmação Sim/Não.
+   */
+  async processarDocumento(
+    from: string,
+    documento: { id?: string; filename?: string; mime_type?: string },
+  ): Promise<void> {
+    try {
+      const user = await this.encontrarUsuario(from);
+      if (!user) {
+        await this.wa.sendText(
+          from,
+          'Seu número ainda não está vinculado a uma conta C. Arias.',
+        );
+        return;
+      }
+      await this.prisma.whatsAppMessage.create({
+        data: {
+          userId: user.id,
+          direcao: 'INBOUND',
+          conteudo: `[arquivo] ${documento.filename ?? ''}`,
+        },
+      });
+
+      const nome = documento.filename || 'arquivo';
+      const ehRelatorio = /\.(csv|xls|xlsx)$/i.test(nome);
+      if (!ehRelatorio) {
+        await this.wa.sendText(
+          from,
+          'Recebi um arquivo, mas só sei importar os relatórios padrão do ' +
+            'Airbnb (.csv) ou Booking (.xls). Prints e PDFs ainda não.',
+        );
+        return;
+      }
+      if (!documento.id) {
+        await this.wa.sendText(from, 'Não consegui identificar o arquivo. Reenvie, por favor.');
+        return;
+      }
+
+      const buffer = await this.wa.baixarMidia(documento.id);
+      if (!buffer) {
+        await this.wa.sendText(
+          from,
+          'Não consegui baixar o arquivo. Tente reenviar em instantes.',
+        );
+        return;
+      }
+      if (buffer.length > MAX_ARQUIVO_BYTES) {
+        await this.wa.sendText(
+          from,
+          'O arquivo é muito grande para importar por aqui. Use a importação no site.',
+        );
+        return;
+      }
+
+      const plataforma = /\.csv$/i.test(nome) ? 'Airbnb' : 'Booking';
+      const contexto = {
+        tipo: 'importar',
+        filename: nome,
+        base64: buffer.toString('base64'),
+      };
+
+      await this.prisma.whatsAppConversation.update({
+        where: { id: (await this.obterConversa(user.id)).id },
+        data: {
+          estado: 'AGUARDANDO_CONFIRMACAO',
+          intencaoPendente: 'ANEXO',
+          contextoPendente: contexto as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      await this.wa.sendText(
+        from,
+        `📄 Recebi o arquivo *${nome}* (parece ${plataforma}).\n\n` +
+          `Quer que eu importe as reservas? Responda *Sim* ou *Não*.`,
+      );
+    } catch (e) {
+      this.logger.error(`Erro ao processar documento: ${String(e)}`);
+      await this.wa.sendText(from, 'Tive um problema com o arquivo. Tente novamente.');
     }
   }
 
@@ -221,31 +312,49 @@ export class WhatsAppService {
 
     const ctx = conversa.contextoPendente as unknown as {
       tipo: string;
-      propertyId: string;
-      imovelNome: string;
-      categoria: string;
-      valor: number;
-      competencia: string;
-      descricao: string | null;
+      // custo
+      propertyId?: string;
+      imovelNome?: string;
+      categoria?: string;
+      valor?: number;
+      competencia?: string;
+      descricao?: string | null;
+      // importar
+      filename?: string;
+      base64?: string;
     };
 
-    if (ctx?.tipo === 'custo') {
-      const [a, m] = ctx.competencia.split('-').map(Number);
+    // Importação de relatório (Airbnb/Booking).
+    if (ctx?.tipo === 'importar' && ctx.base64 && ctx.filename) {
+      await this.wa.sendText(from, '⏳ Importando, um instante…');
+      const buffer = Buffer.from(ctx.base64, 'base64');
+      const resultado = await this.importer.importar({ id: userId }, [
+        { originalname: ctx.filename, buffer },
+      ]);
+      await resetar();
+      await this.wa.sendText(from, this.formatarResumoImport(resultado));
+      return;
+    }
+
+    if (ctx?.tipo === 'custo' && ctx.propertyId && ctx.categoria) {
+      const competencia = ctx.competencia ?? mesAtual();
+      const valor = Number(ctx.valor) || 0;
+      const [a, m] = competencia.split('-').map(Number);
       const data = new Date(Date.UTC(a, m - 1, 1)); // 1º dia do mês de referência
       await this.prisma.cost.create({
         data: {
           propertyId: ctx.propertyId,
           data,
           categoria: ctx.categoria as CostCategory,
-          valor: ctx.valor,
-          descricao: ctx.descricao,
+          valor,
+          descricao: ctx.descricao ?? null,
           statusPagamento: 'PENDENTE',
         },
       });
       await resetar();
       await this.wa.sendText(
         from,
-        `✅ Lançado: ${CAT_LABEL[ctx.categoria]} ${brl(ctx.valor)} em ${ctx.imovelNome} (${competenciaLabel(ctx.competencia)}).`,
+        `✅ Lançado: ${CAT_LABEL[ctx.categoria]} ${brl(valor)} em ${ctx.imovelNome ?? 'imóvel'} (${competenciaLabel(competencia)}).`,
       );
       return;
     }
@@ -313,12 +422,42 @@ export class WhatsAppService {
 
   private textoAjuda(): string {
     return (
-      'Eu sou o assistente da C. Arias. Por enquanto eu lanço *custos* por aqui.\n' +
-      'Exemplos:\n' +
-      '• “Gás 120 no Wai Wai”\n' +
-      '• “Energia 340,50 Marco Zero em julho”\n' +
-      '• “Faxina 150”\n' +
-      'Sempre vou pedir sua confirmação antes de gravar.'
+      'Eu sou o assistente da C. Arias. Por aqui eu já consigo:\n' +
+      '• *Lançar custos* — ex.: “Gás 120 no Wai Wai”, “Energia 340,50 Marco Zero em julho”.\n' +
+      '• *Importar reservas* — me envie o relatório do Airbnb (.csv) ou Booking (.xls) como anexo.\n' +
+      'Sempre peço sua confirmação antes de gravar.'
     );
+  }
+
+  // Monta a resposta com o resultado da importação (espelha o resumo da Fase C).
+  private formatarResumoImport(r: {
+    importadas: number;
+    atualizadas: number;
+    ignoradas: number;
+    porPlataforma: Record<string, { nova: number; atu: number }>;
+    conflitos: string[];
+    erros: string[];
+  }): string {
+    if (r.erros.length && r.importadas === 0 && r.atualizadas === 0) {
+      return `❌ Não consegui importar:\n${r.erros.join('\n')}`;
+    }
+    const linhas: string[] = [
+      `✅ Importação concluída.`,
+      `• Novas: ${r.importadas}`,
+      `• Atualizadas: ${r.atualizadas}`,
+      `• Ignoradas (duplicadas): ${r.ignoradas}`,
+    ];
+    const ab = r.porPlataforma['Airbnb'];
+    const bk = r.porPlataforma['Booking.com'];
+    if (ab && (ab.nova || ab.atu)) linhas.push(`• Airbnb: ${ab.nova} novas`);
+    if (bk && (bk.nova || bk.atu)) linhas.push(`• Booking: ${bk.nova} novas`);
+    if (r.conflitos.length) {
+      linhas.push('', `⚠️ Atenção a possíveis conflitos de data:`);
+      linhas.push(...r.conflitos.slice(0, 5).map((c) => `• ${c}`));
+    }
+    if (r.erros.length) {
+      linhas.push('', `Obs.: ${r.erros.length} arquivo(s) com aviso.`);
+    }
+    return linhas.join('\n');
   }
 }
