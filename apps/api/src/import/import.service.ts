@@ -171,6 +171,15 @@ export class ImportService {
         const j = idx(name);
         return j > -1 ? row[j] ?? '' : '';
       };
+      // Lê a primeira coluna que existir entre vários nomes possíveis
+      // (o Booking mudou os nomes em relatórios mais novos).
+      const gAlt = (...names: string[]) => {
+        for (const n of names) {
+          const v = g(n);
+          if (String(v).trim() !== '') return v;
+        }
+        return '';
+      };
 
       let dados: ReservaImport | null = null;
       if (plat === 'Airbnb') {
@@ -206,39 +215,44 @@ export class ImportService {
           status: this.statusPorData(String(g('Status')), ci, co),
         };
       } else {
-        const ci = this.parseDataFlex(g('Entrada'));
-        const co = this.parseDataFlex(g('Saída'));
+        // Aceita o formato antigo e o novo do Booking (nomes de coluna mudaram).
+        const ci = this.parseDataFlex(gAlt('Entrada', 'Chegada'));
+        const co = this.parseDataFlex(gAlt('Saída'));
         if (!ci || !co) {
           resumo.ignoradas++;
           continue;
         }
         const propId = await this.mapearImovel(
           user,
-          g('Tipo de unidade'),
+          gAlt('Tipo de unidade', 'Nome da propriedade'),
           cacheImovel,
         );
         if (!propId) {
           resumo.ignoradas++;
           continue;
         }
-        const preco = this.parseNumBR(g('Preço'));
-        const com = this.parseNumBR(g('Valor da comissão'));
+        const preco = this.parseNumBR(gAlt('Preço', 'Pagamento total'));
+        const com = this.parseNumBR(gAlt('Valor da comissão', 'Comissão'));
         dados = {
           plataforma: 'Booking.com',
-          codigo: String(g('Número da reserva')).trim(),
+          codigo: String(gAlt('Número da reserva')).trim(),
           hospedeNome: String(
-            g('Nome(s) do(s) hóspede(s)') || g('Reservado por'),
+            gAlt(
+              'Nome(s) do(s) hóspede(s)',
+              'Reservado por',
+              'Nome de quem fez a reserva',
+            ),
           ).trim(),
-          hospedeTel: String(g('Telefone')).trim(),
+          hospedeTel: String(gAlt('Telefone')).trim(),
           propertyId: propId,
           checkin: ci,
           checkout: co,
-          noites: Number(g('Duração (diárias)')) || this.noitesEntre(ci, co),
-          hospedes: Number(g('Pessoas')) || 1,
+          noites: Number(gAlt('Duração (diárias)')) || this.noitesEntre(ci, co),
+          hospedes: Number(gAlt('Pessoas')) || 1,
           valorBruto: preco,
           taxaPlataforma: com,
           valorLiquido: preco - com,
-          status: this.statusPorData(String(g('Status')), ci, co),
+          status: this.statusPorData(String(gAlt('Status')), ci, co),
         };
       }
 
@@ -446,13 +460,29 @@ export class ImportService {
     return parseFloat(t) || 0;
   }
 
-  // Datas flexíveis: ISO, DD/MM/AAAA ou serial do Excel -> AAAA-MM-DD.
+  // Datas flexíveis: ISO, DD/MM/AAAA, DD-MM-AAAA, "17 de maio de 2019"
+  // (por extenso, PT-BR) ou serial do Excel -> AAAA-MM-DD.
   private parseDataFlex(s: unknown): string | null {
     if (s == null || s === '') return null;
     const t = String(s).trim();
     if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-    const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
     if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    // Por extenso: "17 de maio de 2019".
+    const meses: Record<string, number> = {
+      janeiro: 1, fevereiro: 2, marco: 3, 'março': 3, abril: 4, maio: 5,
+      junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10,
+      novembro: 11, dezembro: 12,
+    };
+    const mt = t
+      .toLowerCase()
+      .match(/^(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
+    if (mt) {
+      const mm = meses[mt[2]];
+      if (mm) {
+        return `${mt[3]}-${String(mm).padStart(2, '0')}-${mt[1].padStart(2, '0')}`;
+      }
+    }
     if (/^\d+(\.\d+)?$/.test(t)) {
       const dt = new Date(Date.UTC(1899, 11, 30) + parseFloat(t) * 86_400_000);
       return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
