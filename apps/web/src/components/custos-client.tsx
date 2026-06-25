@@ -211,6 +211,41 @@ export function CustosClient() {
     }
   }
 
+  // Marca todos os custos atualmente visíveis (conforme filtros) como pagos.
+  async function marcarTodosPagos() {
+    const ids = lista.map((c) => c.id);
+    if (!ids.length) return;
+    if (
+      !window.confirm(
+        `Marcar ${ids.length} custo(s) visível(is) como PAGO?\n(Use os filtros acima para escolher quais.)`,
+      )
+    )
+      return;
+    try {
+      const r = await api.post<{ atualizados: number }>(
+        '/costs/marcar-status',
+        { ids, statusPagamento: 'PAGO' },
+      );
+      await carregar();
+      mostrarToast(`${r.atualizados} custo(s) marcado(s) como pago`);
+    } catch (e) {
+      mostrarToast(e instanceof ApiError ? e.message : 'Erro.', true);
+    }
+  }
+
+  // Troca o status de pagamento de um custo (PAGO/PENDENTE/ATRASADO).
+  async function mudarStatus(c: Custo, novo: string) {
+    try {
+      await api.post('/costs/marcar-status', {
+        ids: [c.id],
+        statusPagamento: novo,
+      });
+      await carregar();
+    } catch (e) {
+      mostrarToast(e instanceof ApiError ? e.message : 'Erro.', true);
+    }
+  }
+
   // --- render ---
 
   const semImoveis = !carregando && !erro && imoveis.length === 0;
@@ -271,6 +306,13 @@ export function CustosClient() {
             >
               Custos fixos
             </button>
+            <button
+              onClick={marcarTodosPagos}
+              className="rounded-lg border border-verde/40 px-4 py-2 text-sm font-medium text-verde hover:bg-verde/10"
+              title="Marca como pago todos os custos visíveis (conforme os filtros)"
+            >
+              ✓ Marcar pagos
+            </button>
 
             {imoveis.length > 1 ? (
               <select
@@ -327,6 +369,7 @@ export function CustosClient() {
               lista={lista}
               onEditar={editarCusto}
               onExcluir={excluir}
+              onMudarStatus={mudarStatus}
             />
           )}
         </>
@@ -393,10 +436,12 @@ function TabelaCustos({
   lista,
   onEditar,
   onExcluir,
+  onMudarStatus,
 }: {
   lista: Custo[];
   onEditar: (c: Custo) => void;
   onExcluir: (c: Custo) => void;
+  onMudarStatus: (c: Custo, novo: string) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-carias border border-borda bg-superficie shadow-carias">
@@ -432,13 +477,20 @@ function TabelaCustos({
                 {brl(c.valor)}
               </td>
               <td className="px-4 py-3 align-top">
-                <span
-                  className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${corPagamento(
+                <select
+                  value={c.statusPagamento}
+                  onChange={(e) => onMudarStatus(c, e.target.value)}
+                  className={`cursor-pointer rounded-full border-0 px-2.5 py-1 text-xs font-semibold outline-none ${corPagamento(
                     c.statusPagamento,
                   )}`}
+                  title="Trocar status de pagamento"
                 >
-                  {statusLabel(c.statusPagamento)}
-                </span>
+                  {PAGOS.map((p) => (
+                    <option key={p} value={p}>
+                      {statusLabel(p)}
+                    </option>
+                  ))}
+                </select>
               </td>
               <td className="px-4 py-3 align-top">
                 <div className="flex justify-end gap-1">

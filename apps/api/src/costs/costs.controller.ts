@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { CostCategory, PaymentStatus } from '@prisma/client';
 import { CostsService } from './costs.service';
-import { CostInput, LancarFixosInput } from './cost.dto';
+import { CostInput, LancarFixosInput, MarcarStatusInput } from './cost.dto';
 import { JwtAuthGuard, AuthUser } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 
@@ -34,6 +34,12 @@ export class CostsController {
   @Post('lancar-fixos')
   lancarFixos(@CurrentUser() user: AuthUser, @Body() dto: LancarFixosInput) {
     return this.service.lancarFixos(user, dto.propertyId, dto.mes);
+  }
+
+  // Marca vários custos com um status (ex.: todos pagos). Antes de :id.
+  @Post('marcar-status')
+  marcarStatus(@CurrentUser() user: AuthUser, @Body() dto: MarcarStatusInput) {
+    return this.service.marcarStatus(user, dto.ids, dto.statusPagamento);
   }
 
   @Post()

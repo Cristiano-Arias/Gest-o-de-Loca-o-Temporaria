@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -36,6 +37,16 @@ export class CostInput {
   @IsOptional()
   @IsEnum(PaymentStatus)
   statusPagamento?: PaymentStatus;
+}
+
+// Marca vários custos de uma vez com um status de pagamento (ex.: todos pagos).
+export class MarcarStatusInput {
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
+
+  @IsEnum(PaymentStatus)
+  statusPagamento!: PaymentStatus;
 }
 
 // Pedido para materializar os custos fixos (recorrentes) de um mês.

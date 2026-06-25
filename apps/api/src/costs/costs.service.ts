@@ -39,6 +39,20 @@ export class CostsService {
     return custos.map((c) => this.toDTO(c));
   }
 
+  // Marca vários custos do usuário com um status (ex.: todos como PAGO).
+  async marcarStatus(
+    user: AuthUser,
+    ids: string[],
+    statusPagamento: PaymentStatus,
+  ) {
+    if (!ids?.length) return { atualizados: 0 };
+    const r = await this.prisma.cost.updateMany({
+      where: { id: { in: ids }, property: { userId: user.id } },
+      data: { statusPagamento },
+    });
+    return { atualizados: r.count };
+  }
+
   async create(user: AuthUser, input: CostInput) {
     await this.assertProperty(user, input.propertyId);
     const custo = await this.prisma.cost.create({

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import { brl } from '@/lib/format';
+import { brl, brMesAno } from '@/lib/format';
 import { CATEGORIAS, catLabel } from '@/lib/constants';
 
 type ImovelLite = { id: string; nome: string };
@@ -16,15 +16,20 @@ type Fixo = {
   lancadoNoMes: boolean;
 };
 
-type Form = { id: string | null; propertyId: string; categoria: string; valorMensal: string };
+type Form = {
+  id: string | null;
+  propertyId: string;
+  categoria: string;
+  valorMensal: string;
+};
 
 function mesAtual(): string {
   const t = new Date();
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// Janela para gerenciar os custos fixos (modelos recorrentes) — fica dentro da
-// tela de Custos, evitando uma aba separada no menu.
+// Janela para gerenciar os custos fixos (modelos recorrentes), agrupados por
+// imóvel, com a opção de lançar os que faltam de cada imóvel no mês escolhido.
 export function CustosFixosModal({
   imoveis,
   onFechar,
@@ -35,9 +40,12 @@ export function CustosFixosModal({
   onMudou: () => void;
 }) {
   const [fixos, setFixos] = useState<Fixo[]>([]);
+  const [mes, setMes] = useState(mesAtual());
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [lancando, setLancando] = useState<string | null>(null);
   const [form, setForm] = useState<Form>({
     id: null,
     propertyId: imoveis[0]?.id ?? '',
@@ -49,7 +57,7 @@ export function CustosFixosModal({
     setCarregando(true);
     setErro(null);
     try {
-      const fx = await api.get<Fixo[]>(`/recurring-costs?mes=${mesAtual()}`);
+      const fx = await api.get<Fixo[]>(`/recurring-costs?mes=${mes}`);
       setFixos(fx);
     } catch (e) {
       setErro(
@@ -60,25 +68,34 @@ export function CustosFixosModal({
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [mes]);
 
   useEffect(() => {
     carregar();
   }, [carregar]);
 
-  const total = useMemo(
-    () => fixos.reduce((s, f) => s + f.valorMensal, 0),
-    [fixos],
-  );
+  // Agrupa os modelos por imóvel.
+  const grupos = useMemo(() => {
+    const map = new Map<
+      string,
+      { nome: string; itens: Fixo[]; total: number; faltam: number }
+    >();
+    for (const f of fixos) {
+      if (!map.has(f.propertyId))
+        map.set(f.propertyId, {
+          nome: f.propertyNome,
+          itens: [],
+          total: 0,
+          faltam: 0,
+        });
+      const g = map.get(f.propertyId)!;
+      g.itens.push(f);
+      g.total += f.valorMensal;
+      if (!f.lancadoNoMes) g.faltam += 1;
+    }
+    return [...map.entries()].map(([propertyId, g]) => ({ propertyId, ...g }));
+  }, [fixos]);
 
-  function editar(f: Fixo) {
-    setForm({
-      id: f.id,
-      propertyId: f.propertyId,
-      categoria: f.categoria,
-      valorMensal: String(f.valorMensal),
-    });
-  }
   function limparForm() {
     setForm({
       id: null,
@@ -88,15 +105,18 @@ export function CustosFixosModal({
     });
   }
 
+  function editar(f: Fixo) {
+    setForm({
+      id: f.id,
+      propertyId: f.propertyId,
+      categoria: f.categoria,
+      valorMensal: String(f.valorMensal),
+    });
+  }
+
   async function salvar() {
-    if (!form.propertyId) {
-      setErro('Selecione o imóvel.');
-      return;
-    }
-    if (!(Number(form.valorMensal) > 0)) {
-      setErro('Informe o valor mensal.');
-      return;
-    }
+    if (!form.propertyId) return setErro('Selecione o imóvel.');
+    if (!(Number(form.valorMensal) > 0)) return setErro('Informe o valor mensal.');
     setErro(null);
     setSalvando(true);
     try {
@@ -105,11 +125,8 @@ export function CustosFixosModal({
         categoria: form.categoria,
         valorMensal: Number(form.valorMensal),
       };
-      if (form.id) {
-        await api.patch(`/recurring-costs/${form.id}`, payload);
-      } else {
-        await api.post('/recurring-costs', payload);
-      }
+      if (form.id) await api.patch(`/recurring-costs/${form.id}`, payload);
+      else await api.post('/recurring-costs', payload);
       limparForm();
       await carregar();
       onMudou();
@@ -136,6 +153,30 @@ export function CustosFixosModal({
     }
   }
 
+  // Lança os custos fixos que ainda faltam para UM imóvel, no mês escolhido.
+  async function lancarImovel(propertyId: string, nome: string) {
+    setLancando(propertyId);
+    setMsg(null);
+    setErro(null);
+    try {
+      const r = await api.post<{ lancados: number }>('/costs/lancar-fixos', {
+        propertyId,
+        mes,
+      });
+      await carregar();
+      onMudou();
+      setMsg(
+        r.lancados
+          ? `${r.lancados} custo(s) de ${nome} lançado(s) em ${brMesAno(mes)}.`
+          : `${nome}: todos os fixos de ${brMesAno(mes)} já estavam lançados.`,
+      );
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Erro ao lançar.');
+    } finally {
+      setLancando(null);
+    }
+  }
+
   const campo =
     'mt-1 w-full rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-mar';
   const rotulo = 'block text-xs font-medium text-tinta';
@@ -151,7 +192,7 @@ export function CustosFixosModal({
       >
         <div className="mb-1 flex items-center justify-between">
           <h2 className="font-display text-xl font-semibold text-tinta">
-            Custos fixos (modelos mensais)
+            Custos fixos por imóvel
           </h2>
           <button
             onClick={onFechar}
@@ -161,12 +202,22 @@ export function CustosFixosModal({
             ✕
           </button>
         </div>
-        <p className="mb-4 text-xs text-tinta-suave">
-          Cadastre aqui as despesas que se repetem todo mês (condomínio, IPTU,
-          energia, internet…). Depois, na tela de Custos, use{' '}
-          <strong>“Lançar custos fixos do mês”</strong> para gerar os
-          lançamentos do mês de uma vez.
+        <p className="mb-3 text-xs text-tinta-suave">
+          Modelos de despesas que se repetem todo mês. Use o botão de cada imóvel
+          para lançar no mês escolhido (o sistema não duplica o que já foi
+          lançado).
         </p>
+
+        {/* mês de referência */}
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-sm text-tinta-suave">Mês de referência:</span>
+          <input
+            type="month"
+            value={mes}
+            onChange={(e) => setMes(e.target.value || mesAtual())}
+            className="rounded-lg border border-borda-forte bg-white px-2 py-1.5 text-sm text-tinta"
+          />
+        </div>
 
         {/* formulário de adicionar/editar */}
         <div className="mb-4 grid grid-cols-1 gap-2 rounded-carias border border-borda bg-areia/40 p-3 sm:grid-cols-[1.4fr_1.2fr_0.8fr_auto]">
@@ -232,80 +283,95 @@ export function CustosFixosModal({
             {erro}
           </p>
         ) : null}
+        {msg ? (
+          <p className="mb-3 rounded-lg border border-verde/30 bg-verde/10 p-2 text-sm text-verde">
+            {msg}
+          </p>
+        ) : null}
 
-        {/* lista */}
+        {/* blocos por imóvel */}
         {carregando ? (
           <p className="py-4 text-sm text-tinta-suave">Carregando…</p>
-        ) : fixos.length === 0 ? (
+        ) : grupos.length === 0 ? (
           <p className="py-4 text-sm text-tinta-suave">
-            Nenhum custo fixo cadastrado ainda.
+            Nenhum custo fixo cadastrado ainda. Use o formulário acima para
+            adicionar.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-carias border border-borda">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-borda text-left text-xs uppercase tracking-wide text-tinta-suave">
-                  <th className="px-3 py-2 font-medium">Imóvel</th>
-                  <th className="px-3 py-2 font-medium">Categoria</th>
-                  <th className="px-3 py-2 text-right font-medium">Valor mensal</th>
-                  <th className="px-3 py-2 font-medium">Mês</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {fixos.map((f) => (
-                  <tr key={f.id} className="border-b border-borda last:border-0">
-                    <td className="px-3 py-2 text-tinta">{f.propertyNome}</td>
-                    <td className="px-3 py-2">
-                      <span className="rounded-full bg-areia px-2 py-0.5 text-xs font-medium text-mar">
-                        {catLabel(f.categoria)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-tinta">
-                      {brl(f.valorMensal)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {f.lancadoNoMes ? (
-                        <span className="rounded-full bg-verde/15 px-2 py-0.5 text-xs font-semibold text-verde">
-                          Lançado
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-ambar/20 px-2 py-0.5 text-xs font-semibold text-[#9a6a14]">
-                          A lançar
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => editar(f)}
-                          className="rounded-lg border border-borda-forte px-2 py-1 text-xs font-medium text-tinta hover:bg-areia"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => excluir(f)}
-                          className="rounded-lg px-2 py-1 text-xs font-medium text-vermelho hover:bg-areia"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-borda">
-                  <td className="px-3 py-2 font-semibold text-tinta" colSpan={2}>
-                    Total mensal
-                  </td>
-                  <td className="px-3 py-2 text-right font-bold text-tinta">
-                    {brl(total)}
-                  </td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            </table>
+          <div className="space-y-3">
+            {grupos.map((g) => (
+              <div
+                key={g.propertyId}
+                className="rounded-carias border border-borda"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borda bg-areia/30 px-3 py-2">
+                  <div>
+                    <span className="font-semibold text-tinta">{g.nome}</span>
+                    <span className="ml-2 text-xs text-tinta-suave">
+                      {brl(g.total)}/mês ·{' '}
+                      {g.faltam === 0
+                        ? 'tudo lançado'
+                        : `${g.faltam} a lançar`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => lancarImovel(g.propertyId, g.nome)}
+                    disabled={lancando === g.propertyId || g.faltam === 0}
+                    className="rounded-lg bg-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-coral-escuro disabled:opacity-40"
+                  >
+                    {lancando === g.propertyId
+                      ? 'Lançando…'
+                      : `Lançar os que faltam (${brMesAno(mes)})`}
+                  </button>
+                </div>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {g.itens.map((f) => (
+                      <tr
+                        key={f.id}
+                        className="border-b border-borda last:border-0"
+                      >
+                        <td className="px-3 py-2">
+                          <span className="rounded-full bg-areia px-2 py-0.5 text-xs font-medium text-mar">
+                            {catLabel(f.categoria)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold text-tinta tabular-nums">
+                          {brl(f.valorMensal)}
+                        </td>
+                        <td className="px-3 py-2">
+                          {f.lancadoNoMes ? (
+                            <span className="rounded-full bg-verde/15 px-2 py-0.5 text-xs font-semibold text-verde">
+                              Lançado
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-ambar/20 px-2 py-0.5 text-xs font-semibold text-[#9a6a14]">
+                              A lançar
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              onClick={() => editar(f)}
+                              className="rounded-lg border border-borda-forte px-2 py-1 text-xs font-medium text-tinta hover:bg-areia"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => excluir(f)}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-vermelho hover:bg-areia"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </div>
         )}
 
