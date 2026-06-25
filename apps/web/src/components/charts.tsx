@@ -1,9 +1,10 @@
 'use client';
 
 // Gráficos leves feitos só com SVG/CSS — sem bibliotecas externas.
-// Reproduzem os 4 gráficos do Painel do protótipo, com um acabamento visual
-// mais cuidado (linhas de grade suaves, gradientes, rótulos).
+// Reproduzem os 4 gráficos do Painel do protótipo, com acabamento visual
+// cuidado (grade, gradientes) e interatividade (tooltip ao passar o mouse).
 
+import { useState } from 'react';
 import { brl, pct, brlCompacto } from '@/lib/format';
 
 const PALETA = ['#e07a5f', '#28727c', '#2f9e6f', '#e9a13b', '#5b4486'];
@@ -16,11 +17,34 @@ function SemDados() {
   );
 }
 
-// Barras verticais em SVG (ex.: receita por mês).
-// - linhas de grade suaves ao fundo;
-// - barras com leve gradiente e topo arredondado;
-// - `mostrarValores` escreve o valor (curto) acima de cada barra;
-// - `tendencia` desenha a linha de tendência (regressão linear).
+// Balãozinho (tooltip) que segue o cursor dentro do gráfico.
+function Tip({
+  pos,
+  children,
+}: {
+  pos: { x: number; y: number } | null;
+  children: React.ReactNode;
+}) {
+  if (!pos) return null;
+  return (
+    <div
+      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-tinta px-2 py-1 text-xs font-medium text-white shadow-carias"
+      style={{ left: pos.x, top: pos.y - 8 }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Posição do cursor relativa ao container (para posicionar o tooltip).
+function posRelativa(
+  e: React.MouseEvent<HTMLDivElement>,
+): { x: number; y: number } {
+  const r = e.currentTarget.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+// Barras verticais em SVG (ex.: receita por mês), com tooltip e destaque.
 export function BarrasVerticais({
   labels,
   valores,
@@ -34,6 +58,9 @@ export function BarrasVerticais({
   mostrarValores?: boolean;
   tendencia?: boolean;
 }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
   if (!valores.some((v) => v > 0)) return <SemDados />;
   const max = Math.max(...valores, 1);
   const W = 360;
@@ -48,11 +75,8 @@ export function BarrasVerticais({
   const cx = (i: number) => padX + slot * i + slot / 2;
   const alturaBarra = (v: number) => (v / max) * area;
   const topo = (v: number) => padT + (area - alturaBarra(v));
-
-  // Linhas de grade horizontais (25/50/75/100%).
   const grades = [0.25, 0.5, 0.75, 1].map((f) => padT + area - f * area);
 
-  // Linha de tendência (mínimos quadrados sobre os índices 0..n-1).
   let pontosTendencia = '';
   if (tendencia && n > 1) {
     const sx = valores.reduce((a, _v, i) => a + i, 0);
@@ -70,7 +94,14 @@ export function BarrasVerticais({
   }
 
   return (
-    <div className="h-44">
+    <div
+      className="relative h-44"
+      onMouseMove={(e) => setPos(posRelativa(e))}
+      onMouseLeave={() => {
+        setHover(null);
+        setPos(null);
+      }}
+    >
       <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
         <defs>
           <linearGradient id="grad-barra" x1="0" y1="0" x2="0" y2="1">
@@ -79,7 +110,6 @@ export function BarrasVerticais({
           </linearGradient>
         </defs>
 
-        {/* grade */}
         {grades.map((y, i) => (
           <line
             key={i}
@@ -93,7 +123,19 @@ export function BarrasVerticais({
         ))}
 
         {valores.map((v, i) => (
-          <g key={i}>
+          <g
+            key={i}
+            onMouseEnter={() => setHover(i)}
+            style={{ cursor: 'pointer' }}
+          >
+            {/* área sensível ao mouse (cobre o slot todo) */}
+            <rect
+              x={padX + slot * i}
+              y={padT}
+              width={slot}
+              height={area}
+              fill="transparent"
+            />
             {v > 0 ? (
               <rect
                 x={cx(i) - barW / 2}
@@ -102,9 +144,8 @@ export function BarrasVerticais({
                 height={alturaBarra(v)}
                 rx={3}
                 fill={cores ? cores[i] : 'url(#grad-barra)'}
-              >
-                <title>{`${labels[i]}: ${brl(v)}`}</title>
-              </rect>
+                opacity={hover === null || hover === i ? 1 : 0.45}
+              />
             ) : null}
             {mostrarValores && v > 0 ? (
               <text
@@ -123,7 +164,8 @@ export function BarrasVerticais({
               y={H - 7}
               textAnchor="middle"
               fontSize={9}
-              fill="#7c9499"
+              fill={hover === i ? '#2a4348' : '#7c9499'}
+              fontWeight={hover === i ? 700 : 400}
             >
               {labels[i]}
             </text>
@@ -141,6 +183,12 @@ export function BarrasVerticais({
           />
         ) : null}
       </svg>
+
+      {hover !== null ? (
+        <Tip pos={pos}>
+          {labels[hover]}: {brl(valores[hover])}
+        </Tip>
+      ) : null}
     </div>
   );
 }
@@ -151,12 +199,17 @@ export function BarrasHorizontais({
 }: {
   itens: { label: string; valor: number }[];
 }) {
+  const total = itens.reduce((s, x) => s + x.valor, 0) || 1;
   const max = Math.max(...itens.map((x) => x.valor), 1);
   if (!itens.length) return <SemDados />;
   return (
-    <div className="flex h-44 flex-col justify-center gap-2 overflow-y-auto pr-1">
+    <div className="flex h-44 flex-col justify-center gap-1.5 overflow-y-auto pr-1">
       {itens.map((x) => (
-        <div key={x.label} className="flex items-center gap-2 text-xs">
+        <div
+          key={x.label}
+          className="flex items-center gap-2 rounded-md px-1 py-0.5 text-xs transition hover:bg-areia/50"
+          title={`${x.label}: ${brl(x.valor)} (${pct((x.valor / total) * 100)})`}
+        >
           <span
             className="w-24 shrink-0 truncate text-tinta-suave"
             title={x.label}
@@ -181,7 +234,7 @@ export function BarrasHorizontais({
   );
 }
 
-// Rosca (doughnut) — receita por plataforma, com total no centro e legenda.
+// Rosca (doughnut) com total no centro, legenda e destaque/tooltip por fatia.
 export function Rosca({
   itens,
   cores,
@@ -189,6 +242,9 @@ export function Rosca({
   itens: { label: string; valor: number }[];
   cores?: string[];
 }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
   const total = itens.reduce((s, x) => s + x.valor, 0);
   if (total <= 0) return <SemDados />;
   const cor = (i: number) => cores?.[i] ?? PALETA[i % PALETA.length];
@@ -198,7 +254,14 @@ export function Rosca({
   let offset = 0;
 
   return (
-    <div className="flex h-44 items-center gap-4">
+    <div
+      className="relative flex h-44 items-center gap-4"
+      onMouseMove={(e) => setPos(posRelativa(e))}
+      onMouseLeave={() => {
+        setHover(null);
+        setPos(null);
+      }}
+    >
       <svg viewBox="0 0 160 160" className="h-40 w-40 shrink-0">
         <g transform="translate(80,80) rotate(-90)">
           {itens.map((x, i) => {
@@ -210,18 +273,20 @@ export function Rosca({
                 r={raio}
                 fill="none"
                 stroke={cor(i)}
-                strokeWidth={24}
+                strokeWidth={hover === i ? 28 : 24}
                 strokeDasharray={`${dash} ${circ - dash}`}
                 strokeDashoffset={-offset}
+                opacity={hover === null || hover === i ? 1 : 0.45}
+                onMouseEnter={() => setHover(i)}
+                style={{ cursor: 'pointer' }}
               />
             );
             offset += dash;
             return el;
           })}
         </g>
-        {/* total no centro */}
         <text x="80" y="76" textAnchor="middle" fontSize="10" fill="#7c9499">
-          total
+          {hover === null ? 'total' : itens[hover].label}
         </text>
         <text
           x="80"
@@ -231,12 +296,17 @@ export function Rosca({
           fontWeight={700}
           fill="#2a4348"
         >
-          {brlCompacto(total)}
+          {brlCompacto(hover === null ? total : itens[hover].valor)}
         </text>
       </svg>
       <div className="flex flex-col gap-1.5 text-xs">
         {itens.map((x, i) => (
-          <div key={x.label} className="flex items-center gap-2">
+          <div
+            key={x.label}
+            className="flex cursor-pointer items-center gap-2"
+            onMouseEnter={() => setHover(i)}
+            style={{ opacity: hover === null || hover === i ? 1 : 0.5 }}
+          >
             <span
               className="inline-block h-3 w-3 rounded-sm"
               style={{ backgroundColor: cor(i) }}
@@ -248,11 +318,18 @@ export function Rosca({
           </div>
         ))}
       </div>
+
+      {hover !== null ? (
+        <Tip pos={pos}>
+          {itens[hover].label}: {brl(itens[hover].valor)} ·{' '}
+          {pct((itens[hover].valor / total) * 100)}
+        </Tip>
+      ) : null}
     </div>
   );
 }
 
-// Linha/área 0–100% (ocupação por mês), com grade e rótulos de eixo.
+// Linha/área 0–100% (ocupação por mês), com grade, eixo e pontos interativos.
 export function LinhaArea({
   labels,
   valores,
@@ -260,6 +337,9 @@ export function LinhaArea({
   labels: string[];
   valores: number[];
 }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
   if (!valores.some((v) => v > 0)) return <SemDados />;
   const W = 340;
   const H = 160;
@@ -274,9 +354,17 @@ export function LinhaArea({
   const pts = valores.map((v, i) => `${x(i)},${y(v)}`).join(' ');
   const area = `${x(0)},${H - padB} ${pts} ${x(n - 1)},${H - padB}`;
   const grades = [0, 25, 50, 75, 100];
+  const passo = (W - padL - padR) / Math.max(n - 1, 1);
 
   return (
-    <div className="h-44">
+    <div
+      className="relative h-44"
+      onMouseMove={(e) => setPos(posRelativa(e))}
+      onMouseLeave={() => {
+        setHover(null);
+        setPos(null);
+      }}
+    >
       <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
         <defs>
           <linearGradient id="grad-area" x1="0" y1="0" x2="0" y2="1">
@@ -285,7 +373,6 @@ export function LinhaArea({
           </linearGradient>
         </defs>
 
-        {/* grade + rótulos do eixo Y */}
         {grades.map((g) => (
           <g key={g}>
             <line
@@ -317,9 +404,25 @@ export function LinhaArea({
           strokeLinejoin="round"
         />
         {valores.map((v, i) => (
-          <circle key={i} cx={x(i)} cy={y(v)} r={2.5} fill="#2f9e6f">
-            <title>{`${labels[i]}: ${pct(v)}`}</title>
-          </circle>
+          <g
+            key={i}
+            onMouseEnter={() => setHover(i)}
+            style={{ cursor: 'pointer' }}
+          >
+            <rect
+              x={x(i) - passo / 2}
+              y={padT}
+              width={passo}
+              height={H - padB - padT}
+              fill="transparent"
+            />
+            <circle
+              cx={x(i)}
+              cy={y(v)}
+              r={hover === i ? 4 : 2.5}
+              fill="#2f9e6f"
+            />
+          </g>
         ))}
         {labels.map((l, i) => (
           <text
@@ -328,12 +431,19 @@ export function LinhaArea({
             y={H - 6}
             textAnchor="middle"
             fontSize={9}
-            fill="#7c9499"
+            fill={hover === i ? '#2a4348' : '#7c9499'}
+            fontWeight={hover === i ? 700 : 400}
           >
             {l}
           </text>
         ))}
       </svg>
+
+      {hover !== null ? (
+        <Tip pos={pos}>
+          {labels[hover]}: {pct(valores[hover])}
+        </Tip>
+      ) : null}
     </div>
   );
 }
