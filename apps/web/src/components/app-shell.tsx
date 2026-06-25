@@ -31,9 +31,9 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-screen">
-      <aside className="w-[230px] shrink-0 bg-mar text-[#eafcff] p-5 flex flex-col gap-1.5">
-        <div className="px-2 pb-5 pt-1">
-          <span className="font-display text-2xl font-semibold text-white">
+      <aside className="w-[180px] shrink-0 bg-mar text-[#eafcff] p-3.5 flex flex-col gap-1">
+        <div className="px-2 pb-4 pt-1">
+          <span className="font-display text-xl font-semibold text-white">
             C. Arias
           </span>
         </div>
@@ -41,7 +41,7 @@ export function AppShell({
           {NAV.map((item) => {
             const ativo = item.key === atual;
             const base =
-              'text-left rounded-lg px-3 py-2.5 text-sm font-medium transition';
+              'text-left rounded-lg px-2.5 py-2 text-sm font-medium transition';
             if (item.href) {
               return (
                 <Link
@@ -73,7 +73,7 @@ export function AppShell({
         </div>
       </aside>
 
-      <main className="flex-1 p-8">
+      <main className="flex-1 min-w-0 p-6">
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-3xl font-semibold text-tinta">

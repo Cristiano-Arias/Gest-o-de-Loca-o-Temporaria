@@ -298,14 +298,14 @@ export function PainelClient() {
                     key={x.nome}
                     className="border-b border-borda last:border-0"
                   >
-                    <td className="px-4 py-2.5 font-semibold text-tinta">
+                    <td className="px-2.5 py-2 font-semibold text-tinta">
                       {x.nome}
                     </td>
-                    <td className="px-4 py-2.5 text-right">{x.res}</td>
-                    <td className="px-4 py-2.5 text-right">{x.noites}</td>
-                    <td className="px-4 py-2.5 text-right">{brl(x.rec)}</td>
+                    <td className="px-2.5 py-2 text-right">{x.res}</td>
+                    <td className="px-2.5 py-2 text-right">{x.noites}</td>
+                    <td className="px-2.5 py-2 text-right">{brl(x.rec)}</td>
                     <td
-                      className={`px-4 py-2.5 text-right font-medium ${
+                      className={`px-2.5 py-2 text-right font-medium ${
                         x.lucro >= 0 ? 'text-verde' : 'text-vermelho'
                       }`}
                     >
@@ -342,31 +342,31 @@ export function PainelClient() {
               >
                 {linhasAno.map(({ ano, m: a }) => (
                   <tr key={ano} className="border-b border-borda last:border-0">
-                    <td className="px-4 py-2.5 font-semibold text-tinta">
+                    <td className="px-2.5 py-2 font-semibold text-tinta">
                       {ano}
                     </td>
-                    <td className="px-4 py-2.5 text-right">{a.nReservas}</td>
-                    <td className="px-4 py-2.5 text-right">{a.noitesVend}</td>
-                    <td className="px-4 py-2.5 text-right">{pct(a.ocup)}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-2.5 py-2 text-right">{a.nReservas}</td>
+                    <td className="px-2.5 py-2 text-right">{a.noitesVend}</td>
+                    <td className="px-2.5 py-2 text-right">{pct(a.ocup)}</td>
+                    <td className="px-2.5 py-2 text-right">
                       {brl(a.receitaBruta)}
                     </td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-2.5 py-2 text-right">
                       {brl(a.receitaLiquida)}
                     </td>
-                    <td className="px-4 py-2.5 text-right">{brl(a.custos)}</td>
+                    <td className="px-2.5 py-2 text-right">{brl(a.custos)}</td>
                     <td
-                      className={`px-4 py-2.5 text-right ${
+                      className={`px-2.5 py-2 text-right ${
                         a.lucro >= 0 ? 'text-verde' : 'text-vermelho'
                       }`}
                     >
                       {brl(a.lucro)}
                     </td>
-                    <td className="px-4 py-2.5 text-right">{pct(a.margem)}</td>
-                    <td className="px-4 py-2.5 text-right">{brl(a.adr)}</td>
-                    <td className="px-4 py-2.5 text-right">{brl(a.revpar)}</td>
-                    <td className="px-4 py-2.5 text-right">{brl(a.ticket)}</td>
-                    <td className="px-4 py-2.5 text-right">{dec1(a.estadia)}</td>
+                    <td className="px-2.5 py-2 text-right">{pct(a.margem)}</td>
+                    <td className="px-2.5 py-2 text-right">{brl(a.adr)}</td>
+                    <td className="px-2.5 py-2 text-right">{brl(a.revpar)}</td>
+                    <td className="px-2.5 py-2 text-right">{brl(a.ticket)}</td>
+                    <td className="px-2.5 py-2 text-right">{dec1(a.estadia)}</td>
                   </tr>
                 ))}
               </Tabela>
@@ -494,13 +494,13 @@ function Tabela({
 }) {
   return (
     <div className="overflow-x-auto rounded-carias border border-borda bg-superficie shadow-carias">
-      <table className="w-full text-sm">
+      <table className="w-full whitespace-nowrap text-[13px] tabular-nums">
         <thead>
-          <tr className="border-b border-borda text-xs uppercase tracking-wide text-tinta-suave">
+          <tr className="border-b border-borda text-[10px] uppercase tracking-wide text-tinta-suave">
             {cabecalho.map((c, i) => (
               <th
                 key={c}
-                className={`px-4 py-3 font-medium ${
+                className={`px-2.5 py-2.5 font-medium ${
                   alinhar[i] === 'r' ? 'text-right' : 'text-left'
                 }`}
               >

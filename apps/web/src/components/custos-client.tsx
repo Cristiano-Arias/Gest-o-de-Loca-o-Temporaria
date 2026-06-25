@@ -56,6 +56,7 @@ export function CustosClient() {
   const [salvando, setSalvando] = useState(false);
   const [lancando, setLancando] = useState(false);
   const [fixosAberto, setFixosAberto] = useState(false);
+  const [mesFixos, setMesFixos] = useState(mesAtual());
 
   const [toast, setToast] = useState<{ msg: string; erro: boolean } | null>(
     null,
@@ -194,13 +195,13 @@ export function CustosClient() {
     try {
       const r = await api.post<{ lancados: number }>('/costs/lancar-fixos', {
         propertyId: filtroImovel || undefined,
-        mes: mesAtual(),
+        mes: mesFixos,
       });
       await carregar();
       mostrarToast(
         r.lancados
-          ? `${r.lancados} custo(s) fixo(s) lançado(s) neste mês`
-          : 'Custos fixos deste mês já estavam lançados',
+          ? `${r.lancados} custo(s) fixo(s) lançado(s) em ${brMesAno(mesFixos)}`
+          : `Custos fixos de ${brMesAno(mesFixos)} já estavam lançados`,
       );
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : 'Erro ao lançar.';
@@ -247,13 +248,23 @@ export function CustosClient() {
             >
               + Custo
             </button>
-            <button
-              onClick={lancarFixos}
-              disabled={lancando}
-              className="rounded-lg border border-borda-forte px-4 py-2 text-sm font-medium text-tinta hover:bg-areia disabled:opacity-50"
-            >
-              {lancando ? 'Lançando…' : 'Lançar custos fixos do mês'}
-            </button>
+            <div className="flex items-center gap-1 rounded-lg border border-borda-forte bg-white pl-2">
+              <span className="text-xs text-tinta-suave">Fixos de</span>
+              <input
+                type="month"
+                value={mesFixos}
+                onChange={(e) => setMesFixos(e.target.value || mesAtual())}
+                className="bg-transparent px-1 py-2 text-sm text-tinta outline-none"
+                title="Escolha o mês (pode ser passado) para lançar os custos fixos"
+              />
+              <button
+                onClick={lancarFixos}
+                disabled={lancando}
+                className="rounded-r-lg bg-areia px-3 py-2 text-sm font-medium text-mar hover:bg-areia/70 disabled:opacity-50"
+              >
+                {lancando ? 'Lançando…' : 'Lançar fixos'}
+              </button>
+            </div>
             <button
               onClick={() => setFixosAberto(true)}
               className="rounded-lg border border-borda-forte px-4 py-2 text-sm font-medium text-tinta hover:bg-areia"

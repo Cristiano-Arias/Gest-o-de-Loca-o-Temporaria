@@ -1,7 +1,8 @@
 'use client';
 
 // Gráficos leves feitos só com SVG/CSS — sem bibliotecas externas.
-// Reproduzem os 4 gráficos do Painel do protótipo.
+// Reproduzem os 4 gráficos do Painel do protótipo, com um acabamento visual
+// mais cuidado (linhas de grade suaves, gradientes, rótulos).
 
 import { brl, pct, brlCompacto } from '@/lib/format';
 
@@ -16,7 +17,8 @@ function SemDados() {
 }
 
 // Barras verticais em SVG (ex.: receita por mês).
-// - passe o mouse numa barra para ver o valor cheio (tooltip);
+// - linhas de grade suaves ao fundo;
+// - barras com leve gradiente e topo arredondado;
 // - `mostrarValores` escreve o valor (curto) acima de cada barra;
 // - `tendencia` desenha a linha de tendência (regressão linear).
 export function BarrasVerticais({
@@ -35,17 +37,20 @@ export function BarrasVerticais({
   if (!valores.some((v) => v > 0)) return <SemDados />;
   const max = Math.max(...valores, 1);
   const W = 360;
-  const H = 180;
-  const padT = 16;
-  const padB = 20;
-  const padX = 6;
+  const H = 188;
+  const padT = 18;
+  const padB = 22;
+  const padX = 8;
   const n = valores.length;
   const slot = (W - padX * 2) / n;
-  const barW = Math.min(slot * 0.62, 36);
+  const barW = Math.min(slot * 0.6, 34);
   const area = H - padT - padB;
   const cx = (i: number) => padX + slot * i + slot / 2;
   const alturaBarra = (v: number) => (v / max) * area;
   const topo = (v: number) => padT + (area - alturaBarra(v));
+
+  // Linhas de grade horizontais (25/50/75/100%).
+  const grades = [0.25, 0.5, 0.75, 1].map((f) => padT + area - f * area);
 
   // Linha de tendência (mínimos quadrados sobre os índices 0..n-1).
   let pontosTendencia = '';
@@ -67,6 +72,26 @@ export function BarrasVerticais({
   return (
     <div className="h-44">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
+        <defs>
+          <linearGradient id="grad-barra" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3a93a0" />
+            <stop offset="100%" stopColor="#28727c" />
+          </linearGradient>
+        </defs>
+
+        {/* grade */}
+        {grades.map((y, i) => (
+          <line
+            key={i}
+            x1={padX}
+            y1={y}
+            x2={W - padX}
+            y2={y}
+            stroke="#eef2f2"
+            strokeWidth={1}
+          />
+        ))}
+
         {valores.map((v, i) => (
           <g key={i}>
             {v > 0 ? (
@@ -76,7 +101,7 @@ export function BarrasVerticais({
                 width={barW}
                 height={alturaBarra(v)}
                 rx={3}
-                fill={cores ? cores[i] : '#28727c'}
+                fill={cores ? cores[i] : 'url(#grad-barra)'}
               >
                 <title>{`${labels[i]}: ${brl(v)}`}</title>
               </rect>
@@ -84,25 +109,27 @@ export function BarrasVerticais({
             {mostrarValores && v > 0 ? (
               <text
                 x={cx(i)}
-                y={topo(v) - 3}
+                y={topo(v) - 4}
                 textAnchor="middle"
                 fontSize={8}
-                fill="#4c6a70"
+                fontWeight={600}
+                fill="#3a5b61"
               >
                 {brlCompacto(v)}
               </text>
             ) : null}
             <text
               x={cx(i)}
-              y={H - 6}
+              y={H - 7}
               textAnchor="middle"
               fontSize={9}
-              fill="#4c6a70"
+              fill="#7c9499"
             >
               {labels[i]}
             </text>
           </g>
         ))}
+
         {tendencia && pontosTendencia ? (
           <polyline
             points={pontosTendencia}
@@ -110,6 +137,7 @@ export function BarrasVerticais({
             stroke="#e07a5f"
             strokeWidth={2}
             strokeDasharray="5 4"
+            strokeLinecap="round"
           />
         ) : null}
       </svg>
@@ -126,19 +154,25 @@ export function BarrasHorizontais({
   const max = Math.max(...itens.map((x) => x.valor), 1);
   if (!itens.length) return <SemDados />;
   return (
-    <div className="flex h-44 flex-col justify-center gap-2 overflow-y-auto">
+    <div className="flex h-44 flex-col justify-center gap-2 overflow-y-auto pr-1">
       {itens.map((x) => (
         <div key={x.label} className="flex items-center gap-2 text-xs">
-          <span className="w-28 shrink-0 truncate text-tinta-suave" title={x.label}>
+          <span
+            className="w-24 shrink-0 truncate text-tinta-suave"
+            title={x.label}
+          >
             {x.label}
           </span>
-          <div className="h-4 flex-1 rounded bg-areia">
+          <div className="h-4 flex-1 overflow-hidden rounded-full bg-areia">
             <div
-              className="h-4 rounded bg-coral"
-              style={{ width: `${(x.valor / max) * 100}%` }}
+              className="h-4 rounded-full"
+              style={{
+                width: `${Math.max((x.valor / max) * 100, 3)}%`,
+                background: 'linear-gradient(90deg,#f0936f,#e07a5f)',
+              }}
             />
           </div>
-          <span className="w-20 shrink-0 text-right font-medium text-tinta">
+          <span className="w-20 shrink-0 text-right font-semibold text-tinta tabular-nums">
             {brl(x.valor)}
           </span>
         </div>
@@ -147,8 +181,7 @@ export function BarrasHorizontais({
   );
 }
 
-// Rosca (doughnut) — receita por plataforma, com legenda.
-// `cores` opcional define a cor de cada fatia (senão usa a paleta padrão).
+// Rosca (doughnut) — receita por plataforma, com total no centro e legenda.
 export function Rosca({
   itens,
   cores,
@@ -177,7 +210,7 @@ export function Rosca({
                 r={raio}
                 fill="none"
                 stroke={cor(i)}
-                strokeWidth={26}
+                strokeWidth={24}
                 strokeDasharray={`${dash} ${circ - dash}`}
                 strokeDashoffset={-offset}
               />
@@ -186,6 +219,20 @@ export function Rosca({
             return el;
           })}
         </g>
+        {/* total no centro */}
+        <text x="80" y="76" textAnchor="middle" fontSize="10" fill="#7c9499">
+          total
+        </text>
+        <text
+          x="80"
+          y="92"
+          textAnchor="middle"
+          fontSize="13"
+          fontWeight={700}
+          fill="#2a4348"
+        >
+          {brlCompacto(total)}
+        </text>
       </svg>
       <div className="flex flex-col gap-1.5 text-xs">
         {itens.map((x, i) => (
@@ -195,7 +242,7 @@ export function Rosca({
               style={{ backgroundColor: cor(i) }}
             />
             <span className="text-tinta">{x.label}</span>
-            <span className="text-tinta-suave">
+            <span className="text-tinta-suave tabular-nums">
               {pct((x.valor / total) * 100)}
             </span>
           </div>
@@ -205,7 +252,7 @@ export function Rosca({
   );
 }
 
-// Linha/área 0–100% (ocupação por mês).
+// Linha/área 0–100% (ocupação por mês), com grade e rótulos de eixo.
 export function LinhaArea({
   labels,
   valores,
@@ -214,40 +261,74 @@ export function LinhaArea({
   valores: number[];
 }) {
   if (!valores.some((v) => v > 0)) return <SemDados />;
-  const W = 320;
-  const H = 150;
-  const padB = 18;
-  const padL = 4;
+  const W = 340;
+  const H = 160;
+  const padB = 20;
+  const padL = 22;
+  const padR = 6;
+  const padT = 8;
   const n = valores.length;
-  const x = (i: number) => padL + (i * (W - padL * 2)) / Math.max(n - 1, 1);
-  const y = (v: number) => H - padB - (v / 100) * (H - padB - 6);
+  const x = (i: number) => padL + (i * (W - padL - padR)) / Math.max(n - 1, 1);
+  const y = (v: number) => padT + (1 - v / 100) * (H - padB - padT);
 
   const pts = valores.map((v, i) => `${x(i)},${y(v)}`).join(' ');
-  const area = `${padL},${H - padB} ${pts} ${x(n - 1)},${H - padB}`;
+  const area = `${x(0)},${H - padB} ${pts} ${x(n - 1)},${H - padB}`;
+  const grades = [0, 25, 50, 75, 100];
 
   return (
     <div className="h-44">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
-        <polygon points={area} fill="rgba(47,158,111,.12)" />
+        <defs>
+          <linearGradient id="grad-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgba(47,158,111,.28)" />
+            <stop offset="100%" stopColor="rgba(47,158,111,.02)" />
+          </linearGradient>
+        </defs>
+
+        {/* grade + rótulos do eixo Y */}
+        {grades.map((g) => (
+          <g key={g}>
+            <line
+              x1={padL}
+              y1={y(g)}
+              x2={W - padR}
+              y2={y(g)}
+              stroke="#eef2f2"
+              strokeWidth={1}
+            />
+            <text
+              x={padL - 4}
+              y={y(g) + 3}
+              textAnchor="end"
+              fontSize={8}
+              fill="#9fb2b6"
+            >
+              {g}
+            </text>
+          </g>
+        ))}
+
+        <polygon points={area} fill="url(#grad-area)" />
         <polyline
           points={pts}
           fill="none"
           stroke="#2f9e6f"
           strokeWidth={2}
+          strokeLinejoin="round"
         />
         {valores.map((v, i) => (
           <circle key={i} cx={x(i)} cy={y(v)} r={2.5} fill="#2f9e6f">
-            <title>{pct(v)}</title>
+            <title>{`${labels[i]}: ${pct(v)}`}</title>
           </circle>
         ))}
         {labels.map((l, i) => (
           <text
             key={i}
             x={x(i)}
-            y={H - 5}
+            y={H - 6}
             textAnchor="middle"
             fontSize={9}
-            fill="#4c6a70"
+            fill="#7c9499"
           >
             {l}
           </text>
