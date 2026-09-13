@@ -114,27 +114,6 @@ export function AgendaClient() {
 
   // --- próximos check-ins / check-outs ---
 
-  const { proxIn, proxOut } = useMemo(() => {
-    const hj = isoOf(hoje);
-    const futuras = reservas.filter(
-      (r) =>
-        r.kind !== 'BLOCK' &&
-        r.status !== 'CANCELADA' &&
-        (!filtroImovel || r.propertyId === filtroImovel),
-    );
-    const ins = futuras
-      .filter((r) => r.checkin >= hj)
-      .sort((a, b) => (a.checkin < b.checkin ? -1 : 1))
-      .slice(0, 5);
-    const outs = futuras
-      .filter((r) => r.checkout >= hj)
-      .sort((a, b) => (a.checkout < b.checkout ? -1 : 1))
-      .slice(0, 5);
-    return { proxIn: ins, proxOut: outs };
-    // hoje muda a cada render mas isoOf(hoje) é estável no dia
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reservas, filtroImovel]);
-
   /**
    * Lista consolidada do mês que está sendo exibido no calendário: uma linha
    * por reserva, com entrada e saída juntas. Entra na lista toda reserva que
@@ -293,22 +272,6 @@ export function AgendaClient() {
         </div>
       ) : (
         <>
-          {/* próximos check-ins / check-outs */}
-          <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <MiniLista
-              titulo="Próximos check-ins"
-              itens={proxIn}
-              campo="checkin"
-              onEditar={abrirReserva}
-            />
-            <MiniLista
-              titulo="Próximos check-outs"
-              itens={proxOut}
-              campo="checkout"
-              onEditar={abrirReserva}
-            />
-          </div>
-
           {/* calendário */}
           <div className="rounded-carias border border-borda bg-superficie p-5 shadow-carias">
             <div className="mb-4 flex items-center gap-2">
@@ -418,8 +381,9 @@ export function AgendaClient() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b border-borda-forte text-left text-xs uppercase tracking-wide text-tinta-suave">
-                      <th className="px-2.5 py-2 font-semibold">Check-in</th>
-                      <th className="px-2.5 py-2 font-semibold">Check-out</th>
+                      <th className="px-2.5 py-2 font-semibold">
+                        Período (entrada → saída)
+                      </th>
                       <th className="px-2.5 py-2 text-right font-semibold">Noites</th>
                       <th className="px-2.5 py-2 font-semibold">Hóspede</th>
                       <th className="px-2.5 py-2 text-right font-semibold">Hósp.</th>
@@ -437,11 +401,17 @@ export function AgendaClient() {
                           key={r.id}
                           className="border-b border-borda last:border-0"
                         >
-                          <td className="whitespace-nowrap px-2.5 py-2 font-semibold text-tinta">
-                            {brDate(r.checkin)}
-                          </td>
-                          <td className="whitespace-nowrap px-2.5 py-2 text-tinta">
-                            {brDate(r.checkout)}
+                          <td className="whitespace-nowrap px-2.5 py-2">
+                            <span className="font-semibold text-tinta">
+                              {brDate(r.checkin)}
+                            </span>
+                            <span className="mx-1.5 text-tinta-suave">→</span>
+                            <span className="text-tinta">{brDate(r.checkout)}</span>
+                            {r.checkin >= isoOf(hoje) ? (
+                              <span className="ml-2 whitespace-nowrap text-xs font-semibold text-coral">
+                                {diasAte(r.checkin)}
+                              </span>
+                            ) : null}
                           </td>
                           <td className="px-2.5 py-2 text-right text-tinta-suave">
                             {r.noites}
@@ -516,73 +486,3 @@ function Legenda({ cor, texto }: { cor: string; texto: string }) {
   );
 }
 
-function MiniLista({
-  titulo,
-  itens,
-  campo,
-  onEditar,
-}: {
-  titulo: string;
-  itens: Reserva[];
-  campo: 'checkin' | 'checkout';
-  onEditar: (r: { id: string }) => void;
-}) {
-  const telLink = (t: string) =>
-    t ? `tel:${t.replace(/[^0-9+]/g, '')}` : '';
-
-  return (
-    <div className="rounded-carias border border-borda bg-superficie p-5 shadow-carias">
-      <h3 className="mb-1 font-display text-lg font-semibold text-tinta">
-        {titulo}
-      </h3>
-      {itens.length === 0 ? (
-        <p className="py-3 text-sm text-tinta-suave">Nada nos próximos dias.</p>
-      ) : (
-        itens.map((r) => (
-          <div key={r.id} className="border-b border-borda py-3 last:border-0">
-            <div className="flex items-baseline justify-between gap-2">
-              <strong className="text-tinta">
-                {r.hospedeNome || 'Hóspede'}
-              </strong>
-              <span className="whitespace-nowrap text-xs font-semibold text-coral">
-                {diasAte(r[campo])}
-              </span>
-            </div>
-            <div className="mb-1.5 mt-0.5 text-xs text-tinta-suave">
-              {r.propertyNome} · {r.plataforma || '—'}
-            </div>
-            <div className="text-[13px] leading-relaxed text-tinta">
-              <span className="text-tinta-suave">Check-in:</span>{' '}
-              {brDate(r.checkin)} &nbsp;·&nbsp;{' '}
-              <span className="text-tinta-suave">Check-out:</span>{' '}
-              {brDate(r.checkout)}
-              <br />
-              <span className="text-tinta-suave">Hóspedes:</span>{' '}
-              {r.hospedes || 1}
-              {r.hospedeTel ? (
-                <>
-                  {' '}
-                  &nbsp;·&nbsp; <span className="text-tinta-suave">Tel:</span>{' '}
-                  <a
-                    href={telLink(r.hospedeTel)}
-                    className="font-semibold text-mar"
-                  >
-                    {r.hospedeTel}
-                  </a>
-                </>
-              ) : null}
-            </div>
-            <div className="mt-2">
-              <button
-                onClick={() => onEditar(r)}
-                className="rounded-lg border border-borda-forte px-3 py-1.5 text-xs font-medium text-tinta hover:bg-areia"
-              >
-                Editar informações
-              </button>
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}

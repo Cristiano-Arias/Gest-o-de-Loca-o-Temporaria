@@ -29,6 +29,8 @@ import {
   custosPorCategoria,
   ocupacaoPorMes,
   tabelaPorMes,
+  futuroPorMes,
+  plataformasPresentes,
   dataBR,
 } from '@/lib/metrics';
 
@@ -55,6 +57,7 @@ export function PainelClient() {
 
   const [periodo, setPeriodo] = useState<PeriodoSel>('mes');
   const [filtroImovel, setFiltroImovel] = useState('');
+  const [filtroPlataforma, setFiltroPlataforma] = useState('');
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -85,11 +88,39 @@ export function PainelClient() {
 
   // --- métricas do período ---
 
+  // Canais existentes nas reservas, para o seletor do topo.
+  const plataformas = useMemo(
+    () => plataformasPresentes(reservas, ''),
+    [reservas],
+  );
+
+  // O filtro de plataforma é aplicado uma vez aqui: todo o resto da tela
+  // trabalha sobre estas listas.
+  const reservasVis = useMemo(
+    () =>
+      filtroPlataforma
+        ? reservas.filter((r) => (r.plataforma || 'Outra') === filtroPlataforma)
+        : reservas,
+    [reservas, filtroPlataforma],
+  );
+
+  /**
+   * Custos NÃO são lançados por plataforma — condomínio, energia e limpeza são
+   * do imóvel, não do canal. Com um canal selecionado, somar os custos inteiros
+   * contra a receita de um canal só daria um lucro falso; então os custos saem
+   * da conta e a tela mostra "—" em custo, lucro e margem.
+   */
+  const custosVis = useMemo(
+    () => (filtroPlataforma ? [] : custos),
+    [custos, filtroPlataforma],
+  );
+  const semCustos = filtroPlataforma !== '';
+
   const m = useMemo(() => {
-    const [ini, fim] = periodoRange(periodo, reservas, custos);
+    const [ini, fim] = periodoRange(periodo, reservasVis, custosVis);
     const base = calcMetricas(
-      reservas,
-      custos,
+      reservasVis,
+      custosVis,
       imoveis.length,
       filtroImovel,
       ini,
@@ -97,25 +128,43 @@ export function PainelClient() {
     );
     return {
       ...base,
-      futura: calcFutura(reservas, filtroImovel),
-      situacao: receitaPorSituacao(reservas, filtroImovel, ini, fim),
+      futura: calcFutura(reservasVis, filtroImovel),
+      situacao: receitaPorSituacao(reservasVis, filtroImovel, ini, fim),
       ini,
       fim,
     };
-  }, [periodo, reservas, custos, imoveis, filtroImovel]);
+  }, [periodo, reservasVis, custosVis, imoveis, filtroImovel]);
 
   const linhasMes = useMemo(
     () =>
       tabelaPorMes(
-        reservas,
-        custos,
+        reservasVis,
+        custosVis,
         imoveis.length,
         filtroImovel,
         m.ini,
         m.fim,
       ),
-    [reservas, custos, imoveis, filtroImovel, m.ini, m.fim],
+    [reservasVis, custosVis, imoveis, filtroImovel, m.ini, m.fim],
   );
+
+  // Reservas já contratadas que ainda não começaram, por mês de check-in.
+  // Não depende do período escolhido: futuro é futuro.
+  const futuros = useMemo(
+    () => futuroPorMes(reservasVis, filtroImovel),
+    [reservasVis, filtroImovel],
+  );
+
+  const canaisFuturo = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of futuros) for (const c of Object.keys(l.porPlataforma)) set.add(c);
+    const ordem = ['Airbnb', 'Booking.com', 'Direto', 'Outra'];
+    return [...set].sort((a, b) => {
+      const ia = ordem.indexOf(a);
+      const ib = ordem.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  }, [futuros]);
 
   // Canais que aparecem na tabela mensal (colunas de quantidade por plataforma).
   const canais = useMemo(() => {
@@ -132,14 +181,14 @@ export function PainelClient() {
   }, [linhasMes]);
 
   const rankingDados = useMemo(
-    () => ranking(reservas, custos, imoveis, filtroImovel),
-    [reservas, custos, imoveis, filtroImovel],
+    () => ranking(reservasVis, custosVis, imoveis, filtroImovel),
+    [reservasVis, custosVis, imoveis, filtroImovel],
   );
   const temRanking = rankingDados.some((x) => x.res > 0);
 
   const anos = useMemo(
-    () => anosComDados(reservas, custos, filtroImovel),
-    [reservas, custos, filtroImovel],
+    () => anosComDados(reservasVis, custosVis, filtroImovel),
+    [reservasVis, custosVis, filtroImovel],
   );
 
   const linhasAno = useMemo(
@@ -147,39 +196,39 @@ export function PainelClient() {
       anos.map((ano) => ({
         ano,
         m: calcMetricas(
-          reservas,
-          custos,
+          reservasVis,
+          custosVis,
           imoveis.length,
           filtroImovel,
           new Date(ano, 0, 1),
           new Date(ano, 11, 31),
         ),
       })),
-    [anos, reservas, custos, imoveis, filtroImovel],
+    [anos, reservasVis, custosVis, imoveis, filtroImovel],
   );
 
   // --- séries dos gráficos ---
 
   const meses = useMemo(() => ultimos12(), []);
   const serieReceita = useMemo(
-    () => receitaPorMes(reservas, filtroImovel, meses),
-    [reservas, filtroImovel, meses],
+    () => receitaPorMes(reservasVis, filtroImovel, meses),
+    [reservasVis, filtroImovel, meses],
   );
   const seriePlataforma = useMemo(
-    () => receitaPorPlataforma(reservas, filtroImovel),
-    [reservas, filtroImovel],
+    () => receitaPorPlataforma(reservasVis, filtroImovel),
+    [reservasVis, filtroImovel],
   );
   const serieCustos = useMemo(
     () =>
-      custosPorCategoria(custos, filtroImovel).map((x) => ({
+      custosPorCategoria(custosVis, filtroImovel).map((x) => ({
         label: catLabel(x.categoria),
         valor: x.valor,
       })),
-    [custos, filtroImovel],
+    [custosVis, filtroImovel],
   );
   const serieOcup = useMemo(
-    () => ocupacaoPorMes(reservas, imoveis.length, filtroImovel, meses),
-    [reservas, imoveis.length, filtroImovel, meses],
+    () => ocupacaoPorMes(reservasVis, imoveis.length, filtroImovel, meses),
+    [reservasVis, imoveis.length, filtroImovel, meses],
   );
 
   // --- render ---
@@ -193,19 +242,37 @@ export function PainelClient() {
       titulo="Painel"
       subtitulo="Indicadores do seu negócio"
       acao={
-        !semImoveis && imoveis.length > 1 ? (
-          <select
-            value={filtroImovel}
-            onChange={(e) => setFiltroImovel(e.target.value)}
-            className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
-          >
-            <option value="">Todos os imóveis</option>
-            {imoveis.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-              </option>
-            ))}
-          </select>
+        !semImoveis ? (
+          <div className="flex flex-wrap gap-2">
+            {imoveis.length > 1 ? (
+              <select
+                value={filtroImovel}
+                onChange={(e) => setFiltroImovel(e.target.value)}
+                className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+              >
+                <option value="">Todos os imóveis</option>
+                {imoveis.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {plataformas.length > 1 ? (
+              <select
+                value={filtroPlataforma}
+                onChange={(e) => setFiltroPlataforma(e.target.value)}
+                className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+              >
+                <option value="">Todas as plataformas</option>
+                {plataformas.map((nome) => (
+                  <option key={nome} value={nome}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
         ) : undefined
       }
     >
@@ -247,6 +314,14 @@ export function PainelClient() {
               </button>
             ))}
           </div>
+          {semCustos ? (
+            <p className="-mt-3 mb-3 rounded-lg border border-ambar/40 bg-ambar/10 px-3 py-2 text-xs text-tinta">
+              Filtrando por <strong>{filtroPlataforma}</strong>. Custos (condomínio,
+              energia, limpeza…) são do imóvel, não do canal — por isso custo, lucro
+              e margem aparecem como “—”. Receita, noites, ocupação e diárias seguem
+              valendo para o canal escolhido.
+            </p>
+          ) : null}
           <p className="-mt-3 mb-5 text-xs text-tinta-suave">
             Mostrando de <strong>{dataBR(m.ini)}</strong> a{' '}
             <strong>{dataBR(m.fim)}</strong>.{' '}
@@ -266,14 +341,18 @@ export function PainelClient() {
             />
             <Kpi
               rotulo="Custos"
-              valor={brl(m.custos)}
-              nota={`${m.custosLancamentos} lançamento(s)`}
+              valor={semCustos ? '—' : brl(m.custos)}
+              nota={
+                semCustos
+                  ? 'não separável por canal'
+                  : `${m.custosLancamentos} lançamento(s)`
+              }
             />
             <Kpi
               rotulo="Lucro"
-              valor={brl(m.lucro)}
-              nota={`margem ${pct(m.margem)}`}
-              cor={m.lucro >= 0 ? 'pos' : 'neg'}
+              valor={semCustos ? '—' : brl(m.lucro)}
+              nota={semCustos ? 'não separável por canal' : `margem ${pct(m.margem)}`}
+              cor={semCustos ? undefined : m.lucro >= 0 ? 'pos' : 'neg'}
             />
             <Kpi
               rotulo="Ocupação"
@@ -324,6 +403,70 @@ export function PainelClient() {
             canceladas. Esta faixa mostra quanto já se realizou e quanto ainda
             está por vir (os três somam a Receita líquida).
           </p>
+
+          {/* reservas futuras, mês a mês */}
+          {futuros.length ? (
+            <Secao titulo="Reservas futuras contratadas, mês a mês">
+              <Tabela
+                cabecalho={[
+                  'Mês de entrada',
+                  'Reservas',
+                  ...canaisFuturo,
+                  'Noites',
+                  'Receita líquida',
+                ]}
+                alinhar={[
+                  'l',
+                  'r',
+                  ...canaisFuturo.map(() => 'r' as const),
+                  'r',
+                  'r',
+                ]}
+              >
+                {futuros.map((l) => (
+                  <tr key={l.chave} className="border-b border-borda last:border-0">
+                    <td className="whitespace-nowrap px-2.5 py-2 font-semibold text-tinta">
+                      {MES_NOME[l.mes]}/{l.ano}
+                    </td>
+                    <td className="px-2.5 py-2 text-right font-semibold">
+                      {l.reservas}
+                    </td>
+                    {canaisFuturo.map((c) => (
+                      <td key={c} className="px-2.5 py-2 text-right text-tinta-suave">
+                        {l.porPlataforma[c] ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-2.5 py-2 text-right">{l.noites}</td>
+                    <td className="px-2.5 py-2 text-right font-semibold text-mar">
+                      {brl(l.receitaLiquida)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-borda-forte bg-areia/50">
+                  <td className="px-2.5 py-2 font-semibold text-tinta">Total</td>
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {futuros.reduce((s, l) => s + l.reservas, 0)}
+                  </td>
+                  {canaisFuturo.map((c) => (
+                    <td key={c} className="px-2.5 py-2 text-right font-semibold">
+                      {futuros.reduce((s, l) => s + (l.porPlataforma[c] ?? 0), 0)}
+                    </td>
+                  ))}
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {futuros.reduce((s, l) => s + l.noites, 0)}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold text-mar">
+                    {brl(futuros.reduce((s, l) => s + l.receitaLiquida, 0))}
+                  </td>
+                </tr>
+              </Tabela>
+              <p className="mt-2 text-xs text-tinta-suave">
+                Só o que já está contratado e ainda não começou, pelo mês de{' '}
+                <strong>check-in</strong>. O total bate com o cartão “Receita
+                futura” lá em cima. Não muda com o período escolhido.
+              </p>
+            </Secao>
+          ) : null}
 
           {/* ranking de imóveis */}
           {temRanking ? (
@@ -467,13 +610,19 @@ export function PainelClient() {
                     <td className="px-2.5 py-2 text-right text-tinta-suave">
                       {brl(l.comissao)}
                     </td>
-                    <td className="px-2.5 py-2 text-right">{brl(l.custos)}</td>
+                    <td className="px-2.5 py-2 text-right">
+                      {semCustos ? '—' : brl(l.custos)}
+                    </td>
                     <td
                       className={`px-2.5 py-2 text-right font-semibold ${
-                        l.lucro >= 0 ? 'text-verde' : 'text-vermelho'
+                        semCustos
+                          ? 'text-tinta-suave'
+                          : l.lucro >= 0
+                            ? 'text-verde'
+                            : 'text-vermelho'
                       }`}
                     >
-                      {brl(l.lucro)}
+                      {semCustos ? '—' : brl(l.lucro)}
                     </td>
                   </tr>
                 ))}
@@ -501,10 +650,10 @@ export function PainelClient() {
                     {brl(linhasMes.reduce((s, l) => s + l.comissao, 0))}
                   </td>
                   <td className="px-2.5 py-2 text-right font-semibold">
-                    {brl(linhasMes.reduce((s, l) => s + l.custos, 0))}
+                    {semCustos ? '—' : brl(linhasMes.reduce((s, l) => s + l.custos, 0))}
                   </td>
                   <td className="px-2.5 py-2 text-right font-semibold">
-                    {brl(linhasMes.reduce((s, l) => s + l.lucro, 0))}
+                    {semCustos ? '—' : brl(linhasMes.reduce((s, l) => s + l.lucro, 0))}
                   </td>
                 </tr>
               </Tabela>
