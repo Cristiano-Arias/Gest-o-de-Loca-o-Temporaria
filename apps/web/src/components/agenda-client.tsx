@@ -8,7 +8,12 @@ import { brDate } from '@/lib/format';
 
 // --- tipos -------------------------------------------------------------
 
-type ImovelLite = { id: string; nome: string };
+type ImovelLite = {
+  id: string;
+  nome: string;
+  checkin: string; // horário padrão de entrada do imóvel, ex.: '15:00'
+  checkout: string; // horário padrão de saída, ex.: '11:00'
+};
 
 type Reserva = {
   id: string;
@@ -78,6 +83,8 @@ export function AgendaClient() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [filtroImovel, setFiltroImovel] = useState('');
+  const [filtroPlataforma, setFiltroPlataforma] = useState('');
+  const [alcance, setAlcance] = useState<'mes' | '30' | 'tudo'>('mes');
 
   const hoje = hojeDate();
   const [ano, setAno] = useState(hoje.getFullYear());
@@ -121,18 +128,60 @@ export function AgendaClient() {
    * dentro, ou termina depois), ordenada pela data de entrada.
    */
   const doMes = useMemo(() => {
-    const ini = isoOf(new Date(ano, mes, 1));
-    const fim = isoOf(new Date(ano, mes + 1, 0));
+    let ini: string;
+    let fim: string;
+    if (alcance === 'mes') {
+      ini = isoOf(new Date(ano, mes, 1));
+      fim = isoOf(new Date(ano, mes + 1, 0));
+    } else if (alcance === '30') {
+      ini = isoOf(hoje);
+      const d = new Date(hoje);
+      d.setDate(d.getDate() + 30);
+      fim = isoOf(d);
+    } else {
+      ini = '0000-01-01';
+      fim = '9999-12-31';
+    }
     return reservas
       .filter(
         (r) =>
           r.status !== 'CANCELADA' &&
           (!filtroImovel || r.propertyId === filtroImovel) &&
+          (!filtroPlataforma ||
+            (r.plataforma || 'Outra') === filtroPlataforma ||
+            r.kind === 'BLOCK') &&
           r.checkin <= fim &&
           r.checkout >= ini,
       )
       .sort((a, b) => (a.checkin < b.checkin ? -1 : a.checkin > b.checkin ? 1 : 0));
-  }, [reservas, filtroImovel, ano, mes]);
+    // hoje é estável dentro do dia
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservas, filtroImovel, filtroPlataforma, alcance, ano, mes]);
+
+  const plataformas = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of reservas) {
+      if (r.kind !== 'BLOCK') set.add(r.plataforma || 'Outra');
+    }
+    const ordem = ['Airbnb', 'Booking.com', 'Direto', 'Outra'];
+    return [...set].sort((a, b) => {
+      const ia = ordem.indexOf(a);
+      const ib = ordem.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  }, [reservas]);
+
+  // Horários padrão de cada imóvel, para mostrar junto das datas.
+  const horarios = useMemo(() => {
+    const mapa = new Map<string, { checkin: string; checkout: string }>();
+    for (const i of imoveis) {
+      mapa.set(i.id, {
+        checkin: i.checkin || '15:00',
+        checkout: i.checkout || '11:00',
+      });
+    }
+    return mapa;
+  }, [imoveis]);
 
   // --- eventos do calendário por dia ---
 
@@ -235,20 +284,36 @@ export function AgendaClient() {
       titulo="Agenda"
       subtitulo="Calendário, check-ins e check-outs"
       acao={
-        imoveis.length > 1 ? (
-          <select
-            value={filtroImovel}
-            onChange={(e) => setFiltroImovel(e.target.value)}
-            className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
-          >
-            <option value="">Todos os imóveis</option>
-            {imoveis.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-              </option>
-            ))}
-          </select>
-        ) : undefined
+        <div className="flex flex-wrap gap-2">
+          {imoveis.length > 1 ? (
+            <select
+              value={filtroImovel}
+              onChange={(e) => setFiltroImovel(e.target.value)}
+              className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+            >
+              <option value="">Todos os imóveis</option>
+              {imoveis.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {plataformas.length > 1 ? (
+            <select
+              value={filtroPlataforma}
+              onChange={(e) => setFiltroPlataforma(e.target.value)}
+              className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+            >
+              <option value="">Todas as plataformas</option>
+              {plataformas.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
       }
     >
       {erro ? (
@@ -363,13 +428,37 @@ export function AgendaClient() {
           {/* lista consolidada do mês */}
           <div className="mt-4 rounded-carias border border-borda bg-superficie p-5 shadow-carias">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="font-display text-lg font-semibold text-tinta">
-                Entradas e saídas de {rotuloMes}
-              </h3>
-              <span className="text-sm text-tinta-suave">
-                {doMes.length} registro(s) ·{' '}
-                {doMes.filter((r) => r.kind !== 'BLOCK').length} reserva(s)
-              </span>
+              <div>
+                <h3 className="font-display text-lg font-semibold text-tinta">
+                  Entradas e saídas
+                </h3>
+                <span className="text-sm text-tinta-suave">
+                  {doMes.length} registro(s) ·{' '}
+                  {doMes.filter((r) => r.kind !== 'BLOCK').length} reserva(s) ·{' '}
+                  {doMes.reduce((s, r) => s + (r.hospedes || 0), 0)} hóspede(s)
+                </span>
+              </div>
+              <div className="inline-flex gap-1 rounded-lg border border-borda bg-areia/40 p-1">
+                {(
+                  [
+                    ['mes', rotuloMes],
+                    ['30', 'Próximos 30 dias'],
+                    ['tudo', 'Tudo'],
+                  ] as const
+                ).map(([v, l]) => (
+                  <button
+                    key={v}
+                    onClick={() => setAlcance(v)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition ${
+                      alcance === v
+                        ? 'bg-mar text-white'
+                        : 'text-tinta-suave hover:bg-areia'
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {doMes.length === 0 ? (
@@ -381,14 +470,13 @@ export function AgendaClient() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b border-borda-forte text-left text-xs uppercase tracking-wide text-tinta-suave">
-                      <th className="px-2.5 py-2 font-semibold">
-                        Período (entrada → saída)
-                      </th>
-                      <th className="px-2.5 py-2 text-right font-semibold">Noites</th>
+                      <th className="px-2.5 py-2 font-semibold">Entrada</th>
+                      <th className="px-2.5 py-2 font-semibold">Saída</th>
+                      <th className="px-2.5 py-2 text-right font-semibold">Dias</th>
+                      <th className="px-2.5 py-2 font-semibold">Imóvel</th>
                       <th className="px-2.5 py-2 font-semibold">Hóspede</th>
                       <th className="px-2.5 py-2 text-right font-semibold">Hósp.</th>
                       <th className="px-2.5 py-2 font-semibold">Telefone</th>
-                      <th className="px-2.5 py-2 font-semibold">Imóvel</th>
                       <th className="px-2.5 py-2 font-semibold">Canal</th>
                       <th className="px-2.5 py-2" />
                     </tr>
@@ -405,16 +493,26 @@ export function AgendaClient() {
                             <span className="font-semibold text-tinta">
                               {brDate(r.checkin)}
                             </span>
-                            <span className="mx-1.5 text-tinta-suave">→</span>
-                            <span className="text-tinta">{brDate(r.checkout)}</span>
+                            <span className="ml-1.5 text-xs text-tinta-suave">
+                              {horarios.get(r.propertyId)?.checkin ?? '15:00'}
+                            </span>
                             {r.checkin >= isoOf(hoje) ? (
                               <span className="ml-2 whitespace-nowrap text-xs font-semibold text-coral">
                                 {diasAte(r.checkin)}
                               </span>
                             ) : null}
                           </td>
+                          <td className="whitespace-nowrap px-2.5 py-2">
+                            <span className="text-tinta">{brDate(r.checkout)}</span>
+                            <span className="ml-1.5 text-xs text-tinta-suave">
+                              {horarios.get(r.propertyId)?.checkout ?? '11:00'}
+                            </span>
+                          </td>
                           <td className="px-2.5 py-2 text-right text-tinta-suave">
                             {r.noites}
+                          </td>
+                          <td className="px-2.5 py-2 text-tinta">
+                            {r.propertyNome}
                           </td>
                           <td className="px-2.5 py-2 text-tinta">
                             {bloqueio ? (
@@ -441,9 +539,6 @@ export function AgendaClient() {
                             )}
                           </td>
                           <td className="px-2.5 py-2 text-tinta-suave">
-                            {r.propertyNome}
-                          </td>
-                          <td className="px-2.5 py-2 text-tinta-suave">
                             {bloqueio ? '—' : r.plataforma || '—'}
                           </td>
                           <td className="px-2.5 py-2 text-right">
@@ -462,8 +557,11 @@ export function AgendaClient() {
               </div>
             )}
             <p className="mt-2 text-xs text-tinta-suave">
-              Inclui toda reserva que encosta no mês — inclusive as que começaram
-              antes ou terminam depois. Canceladas ficam de fora.
+              Inclui toda reserva que encosta no período — inclusive as que
+              começaram antes ou terminam depois. Canceladas ficam de fora. Os{' '}
+              <strong>horários</strong> são os padrões cadastrados no imóvel, não
+              por reserva. O <strong>nº de hóspedes</strong> não vem nos relatórios
+              do Airbnb nem do Booking: onde aparece 1, pode ser só o valor padrão.
             </p>
           </div>
         </>
