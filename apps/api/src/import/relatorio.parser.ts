@@ -376,10 +376,20 @@ function lerAirbnb(cabecalho: string[], corpo: string[][]): LeituraRelatorio {
         (Number(ler(base, 'bebes')) || 0) || null;
 
     const statusTexto = ler(base, 'status');
-    // Código sem nenhuma linha "Reserva" (só taxa de cancelamento/estorno)
-    // significa reserva cancelada.
+    // Uma reserva conta como cancelada quando:
+    //  - o relatório diz isso no status; ou
+    //  - o código não tem nenhuma linha "Reserva", só taxa de cancelamento
+    //    ou estorno; ou
+    //  - existe um ajuste/estorno que zerou (ou virou negativo) o valor —
+    //    é o caso de uma reserva desfeita por acordo e remarcada sob outro
+    //    código, que senão apareceria como conflito de agenda com a nova.
+    const temAjuste =
+      existe('tipo') &&
+      linhasDoGrupo.some((l) => normalizar(ler(l, 'tipo')) !== 'reserva');
     const cancelada =
-      /cancel/i.test(statusTexto) || (existe('tipo') && !linhaReserva);
+      /cancel/i.test(statusTexto) ||
+      (existe('tipo') && !linhaReserva) ||
+      (temAjuste && liquido <= 0);
 
     reservas.push({
       plataforma: 'Airbnb',
