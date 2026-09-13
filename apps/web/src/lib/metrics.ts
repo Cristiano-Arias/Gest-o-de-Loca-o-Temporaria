@@ -506,7 +506,9 @@ export type LinhaMes = {
   mes: number; // 0-11
   reservas: number;
   porPlataforma: Record<string, number>; // nome do canal -> nº de reservas
-  noites: number; // noites efetivamente dentro do mês
+  noites: number; // noites efetivamente dentro do mês (base da ocupação)
+  noitesDisp: number; // noites disponíveis: imóveis × dias do mês
+  noitesReservas: number; // soma das noites das reservas que fecharam no mês
   estadia: number; // média de noites das reservas do mês
   ocup: number; // % do mês ocupado
   receitaLiquida: number;
@@ -594,6 +596,8 @@ export function tabelaPorMes(
       reservas: doMes.length,
       porPlataforma,
       noites,
+      noitesDisp: numImoveis * diasNaJanela,
+      noitesReservas: doMes.reduce((s, r) => s + r.noites, 0),
       estadia: doMes.length
         ? doMes.reduce((s, r) => s + r.noites, 0) / doMes.length
         : 0,
@@ -675,4 +679,180 @@ export function futuroPorMes(
 
   // Do mês mais próximo para o mais distante.
   return [...mapa.values()].sort((a, b) => (a.chave < b.chave ? -1 : 1));
+}
+
+// --- Os três tempos: passado, mês atual, futuro -----------------------
+
+export type Tempo = {
+  receitaLiquida: number;
+  reservas: number;
+  noites: number;
+};
+
+export type TresTempos = {
+  realizado: Tempo; // check-out antes deste mês
+  atual: Tempo; // check-out dentro do mês corrente
+  futuro: Tempo; // check-out depois deste mês
+  mesAtualLabel: string;
+};
+
+/**
+ * A leitura de cinco segundos do Painel, sempre pelo mesmo critério do resto
+ * da tela: a reserva pertence ao mês em que ela TERMINA (check-out).
+ * Não depende do período escolhido — são os três tempos do negócio.
+ */
+export function tresTempos(
+  reservas: ReservaMetrica[],
+  filtroImovel: string,
+): TresTempos {
+  const h = hojeDate();
+  const inicioMes = new Date(h.getFullYear(), h.getMonth(), 1);
+  const fimMes = new Date(h.getFullYear(), h.getMonth() + 1, 0);
+
+  const ativas = reservasAtivas(reservas, filtroImovel);
+  const vazio = (): Tempo => ({ receitaLiquida: 0, reservas: 0, noites: 0 });
+  const somar = (alvo: Tempo, r: ReservaMetrica) => {
+    alvo.receitaLiquida += r.valorLiquido;
+    alvo.reservas += 1;
+    alvo.noites += r.noites;
+  };
+
+  const realizado = vazio();
+  const atual = vazio();
+  const futuro = vazio();
+  for (const r of ativas) {
+    const co = parseISO(r.checkout);
+    if (co < inicioMes) somar(realizado, r);
+    else if (co <= fimMes) somar(atual, r);
+    else somar(futuro, r);
+  }
+
+  return {
+    realizado,
+    atual,
+    futuro,
+    mesAtualLabel: inicioMes.toLocaleDateString('pt-BR', {
+      month: 'long',
+      year: 'numeric',
+    }),
+  };
+}
+
+// --- Régua mensal agrupada por ano ------------------------------------
+
+export type TotaisPeriodo = {
+  reservas: number;
+  porPlataforma: Record<string, number>;
+  noites: number;
+  noitesDisp: number;
+  noitesReservas: number;
+  estadia: number;
+  ocup: number;
+  receitaLiquida: number;
+  comissao: number;
+  custos: number;
+  lucro: number;
+};
+
+export type BlocoAno = {
+  ano: number;
+  meses: LinhaMes[]; // em ordem cronológica
+  total: TotaisPeriodo;
+};
+
+/**
+ * Soma um conjunto de meses. Ocupação e estadia são RECALCULADAS a partir dos
+ * denominadores — somar percentuais ou médias daria número errado.
+ */
+export function somarMeses(linhas: LinhaMes[]): TotaisPeriodo {
+  const t: TotaisPeriodo = {
+    reservas: 0,
+    porPlataforma: {},
+    noites: 0,
+    noitesDisp: 0,
+    noitesReservas: 0,
+    estadia: 0,
+    ocup: 0,
+    receitaLiquida: 0,
+    comissao: 0,
+    custos: 0,
+    lucro: 0,
+  };
+  for (const l of linhas) {
+    t.reservas += l.reservas;
+    for (const [canal, n] of Object.entries(l.porPlataforma)) {
+      t.porPlataforma[canal] = (t.porPlataforma[canal] ?? 0) + n;
+    }
+    t.noites += l.noites;
+    t.noitesDisp += l.noitesDisp;
+    t.noitesReservas += l.noitesReservas;
+    t.receitaLiquida += l.receitaLiquida;
+    t.comissao += l.comissao;
+    t.custos += l.custos;
+    t.lucro += l.lucro;
+  }
+  t.estadia = t.reservas > 0 ? t.noitesReservas / t.reservas : 0;
+  t.ocup = t.noitesDisp > 0 ? (t.noites / t.noitesDisp) * 100 : 0;
+  return t;
+}
+
+// Agrupa a régua por ano, do ano mais recente para o mais antigo.
+export function agruparPorAno(linhas: LinhaMes[]): BlocoAno[] {
+  const mapa = new Map<number, LinhaMes[]>();
+  for (const l of linhas) {
+    const arr = mapa.get(l.ano);
+    if (arr) arr.push(l);
+    else mapa.set(l.ano, [l]);
+  }
+  return [...mapa.entries()]
+    .map(([ano, meses]) => {
+      const ordenados = [...meses].sort((a, b) => a.mes - b.mes);
+      return { ano, meses: ordenados, total: somarMeses(ordenados) };
+    })
+    .sort((a, b) => b.ano - a.ano);
+}
+
+// --- Série do gráfico: 6 meses para trás, o atual e 6 para frente ------
+
+export type PontoReceita = {
+  label: string; // 'set/26'
+  valor: number;
+  tempo: 'passado' | 'atual' | 'futuro';
+};
+
+const MES_CURTO = [
+  'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+  'jul', 'ago', 'set', 'out', 'nov', 'dez',
+];
+
+/**
+ * Receita líquida por mês de check-out, de 6 meses atrás até 6 meses à frente.
+ * O mês atual fica no meio e vem marcado, para a leitura ser imediata:
+ * o que já entrou à esquerda, o que está contratado à direita.
+ */
+export function serieReceita6x6(
+  reservas: ReservaMetrica[],
+  filtroImovel: string,
+): PontoReceita[] {
+  const h = hojeDate();
+  const ativas = reservasAtivas(reservas, filtroImovel);
+  const pontos: PontoReceita[] = [];
+
+  for (let i = -6; i <= 6; i++) {
+    const dt = new Date(h.getFullYear(), h.getMonth() + i, 1);
+    const ano = dt.getFullYear();
+    const mes = dt.getMonth();
+    const valor = ativas
+      .filter((r) => {
+        const co = parseISO(r.checkout);
+        return co.getFullYear() === ano && co.getMonth() === mes;
+      })
+      .reduce((s, r) => s + r.valorLiquido, 0);
+    pontos.push({
+      label: `${MES_CURTO[mes]}/${String(ano).slice(2)}`,
+      valor,
+      tempo: i < 0 ? 'passado' : i === 0 ? 'atual' : 'futuro',
+    });
+  }
+  return pontos;
 }
