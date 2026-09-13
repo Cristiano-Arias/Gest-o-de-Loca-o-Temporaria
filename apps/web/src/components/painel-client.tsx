@@ -28,14 +28,21 @@ import {
   receitaPorPlataforma,
   custosPorCategoria,
   ocupacaoPorMes,
+  tabelaPorMes,
+  dataBR,
 } from '@/lib/metrics';
 
+const MES_NOME = [
+  'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+  'jul', 'ago', 'set', 'out', 'nov', 'dez',
+];
+
 const PERIODOS: { v: PeriodoSel; l: string }[] = [
-  { v: 'mes', l: 'Mês' },
-  { v: '30', l: '30d' },
-  { v: '90', l: '90d' },
-  { v: '365', l: '12m' },
-  { v: 'ano', l: 'Ano' },
+  { v: 'mes', l: 'Este mês' },
+  { v: '30', l: 'Últimos 30 dias' },
+  { v: '90', l: 'Últimos 90 dias' },
+  { v: '365', l: 'Últimos 12 meses' },
+  { v: 'ano', l: 'Este ano' },
   { v: 'tudo', l: 'Desde o início' },
 ];
 
@@ -46,7 +53,7 @@ export function PainelClient() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [periodo, setPeriodo] = useState<PeriodoSel>('30');
+  const [periodo, setPeriodo] = useState<PeriodoSel>('mes');
   const [filtroImovel, setFiltroImovel] = useState('');
 
   const carregar = useCallback(async () => {
@@ -92,8 +99,37 @@ export function PainelClient() {
       ...base,
       futura: calcFutura(reservas, filtroImovel),
       situacao: receitaPorSituacao(reservas, filtroImovel, ini, fim),
+      ini,
+      fim,
     };
   }, [periodo, reservas, custos, imoveis, filtroImovel]);
+
+  const linhasMes = useMemo(
+    () =>
+      tabelaPorMes(
+        reservas,
+        custos,
+        imoveis.length,
+        filtroImovel,
+        m.ini,
+        m.fim,
+      ),
+    [reservas, custos, imoveis, filtroImovel, m.ini, m.fim],
+  );
+
+  // Canais que aparecem na tabela mensal (colunas de quantidade por plataforma).
+  const canais = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of linhasMes) {
+      for (const c of Object.keys(l.porPlataforma)) set.add(c);
+    }
+    const ordem = ['Airbnb', 'Booking.com', 'Direto', 'Outra'];
+    return [...set].sort((a, b) => {
+      const ia = ordem.indexOf(a);
+      const ib = ordem.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  }, [linhasMes]);
 
   const rankingDados = useMemo(
     () => ranking(reservas, custos, imoveis, filtroImovel),
@@ -211,6 +247,15 @@ export function PainelClient() {
               </button>
             ))}
           </div>
+          <p className="-mt-3 mb-5 text-xs text-tinta-suave">
+            Mostrando de <strong>{dataBR(m.ini)}</strong> a{' '}
+            <strong>{dataBR(m.fim)}</strong>.{' '}
+            {periodo === 'mes' || periodo === 'ano'
+              ? 'Inclui dias que ainda não chegaram — a faixa colorida abaixo separa o que já se realizou.'
+              : periodo === 'tudo'
+                ? 'Da reserva mais antiga à mais distante.'
+                : 'Janela para trás: só o que já aconteceu. O que está por vir aparece em “Receita futura”.'}
+          </p>
 
           {/* KPIs */}
           <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -374,6 +419,111 @@ export function PainelClient() {
                 Receita líquida já com a comissão do Booking descontada; no
                 Airbnb usa os ganhos líquidos do anfitrião.
               </p>
+            </Secao>
+          ) : null}
+
+          {/* desempenho mês a mês */}
+          {linhasMes.length ? (
+            <Secao titulo="Desempenho mês a mês">
+              <Tabela
+                cabecalho={[
+                  'Mês',
+                  'Reservas',
+                  ...canais,
+                  'Noites',
+                  'Estadia',
+                  'Ocupação',
+                  'Rec. líq.',
+                  'Comissão',
+                  'Custos',
+                  'Lucro',
+                ]}
+                alinhar={[
+                  'l',
+                  'r',
+                  ...canais.map(() => 'r' as const),
+                  'r', 'r', 'r', 'r', 'r', 'r', 'r',
+                ]}
+              >
+                {linhasMes.map((l) => (
+                  <tr key={l.chave} className="border-b border-borda last:border-0">
+                    <td className="whitespace-nowrap px-2.5 py-2 font-semibold text-tinta">
+                      {MES_NOME[l.mes]}/{l.ano}
+                    </td>
+                    <td className="px-2.5 py-2 text-right font-semibold">
+                      {l.reservas}
+                    </td>
+                    {canais.map((c) => (
+                      <td key={c} className="px-2.5 py-2 text-right text-tinta-suave">
+                        {l.porPlataforma[c] ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-2.5 py-2 text-right">{l.noites}</td>
+                    <td className="px-2.5 py-2 text-right">{dec1(l.estadia)}</td>
+                    <td className="px-2.5 py-2 text-right">{pct(l.ocup)}</td>
+                    <td className="px-2.5 py-2 text-right">
+                      {brl(l.receitaLiquida)}
+                    </td>
+                    <td className="px-2.5 py-2 text-right text-tinta-suave">
+                      {brl(l.comissao)}
+                    </td>
+                    <td className="px-2.5 py-2 text-right">{brl(l.custos)}</td>
+                    <td
+                      className={`px-2.5 py-2 text-right font-semibold ${
+                        l.lucro >= 0 ? 'text-verde' : 'text-vermelho'
+                      }`}
+                    >
+                      {brl(l.lucro)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-borda-forte bg-areia/50">
+                  <td className="whitespace-nowrap px-2.5 py-2 font-semibold text-tinta">
+                    Total fechado
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {linhasMes.reduce((s, l) => s + l.reservas, 0)}
+                  </td>
+                  {canais.map((c) => (
+                    <td key={c} className="px-2.5 py-2 text-right font-semibold">
+                      {linhasMes.reduce((s, l) => s + (l.porPlataforma[c] ?? 0), 0)}
+                    </td>
+                  ))}
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {linhasMes.reduce((s, l) => s + l.noites, 0)}
+                  </td>
+                  <td className="px-2.5 py-2 text-right">—</td>
+                  <td className="px-2.5 py-2 text-right">—</td>
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {brl(linhasMes.reduce((s, l) => s + l.receitaLiquida, 0))}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {brl(linhasMes.reduce((s, l) => s + l.comissao, 0))}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {brl(linhasMes.reduce((s, l) => s + l.custos, 0))}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold">
+                    {brl(linhasMes.reduce((s, l) => s + l.lucro, 0))}
+                  </td>
+                </tr>
+              </Tabela>
+              <div className="mt-2 space-y-1 text-xs text-tinta-suave">
+                <p>
+                  Reservas, receita e comissão entram no mês do{' '}
+                  <strong>check-out</strong> — é assim que as plataformas fecham o
+                  mês. Já <strong>noites e ocupação</strong> contam as noites que
+                  caíram dentro de cada mês, para que uma estadia longa não infle um
+                  mês só. “Estadia” é a média de noites por reserva.
+                </p>
+                <p>
+                  Por isso o <strong>Total fechado</strong> pode ficar abaixo do
+                  número de reservas lá em cima: os KPIs do topo contam toda reserva
+                  que <em>encosta</em> no período, e uma hospedagem que só termina
+                  depois do fim da janela ainda não fechou nenhum mês. As{' '}
+                  <strong>noites</strong>, essas sim, batem exatamente com o topo.
+                </p>
+              </div>
             </Secao>
           ) : null}
 
