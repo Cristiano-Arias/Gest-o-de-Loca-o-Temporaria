@@ -13,6 +13,7 @@ type Resultado = {
   };
   conflitos: string[];
   erros: string[];
+  avisos?: string[];
 };
 
 export function ImportModal({
@@ -177,9 +178,34 @@ function ResumoImport({
       ) : null}
 
       {r.erros.length ? (
-        <p className="text-xs text-tinta-suave">
-          Avisos: {r.erros.join(' · ')}
-        </p>
+        <div className="rounded-lg border border-vermelho/30 bg-vermelho/10 p-3">
+          <strong className="text-sm text-vermelho">
+            Não consegui ler {r.erros.length} arquivo(s):
+          </strong>
+          <ul className="mt-2 list-disc pl-5 text-xs text-vermelho">
+            {r.erros.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {r.avisos?.length ? (
+        <details className="rounded-lg border border-borda bg-areia/40 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-tinta">
+            {r.avisos.length} linha(s) que eu não consegui aproveitar
+          </summary>
+          <ul className="mt-2 list-disc pl-5 text-xs text-tinta-suave">
+            {r.avisos.slice(0, 20).map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+          {r.avisos.length > 20 ? (
+            <div className="mt-1 text-xs text-tinta-suave">
+              …e mais {r.avisos.length - 20}.
+            </div>
+          ) : null}
+        </details>
       ) : null}
 
       <div className="flex justify-end">

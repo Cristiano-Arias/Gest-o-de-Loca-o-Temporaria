@@ -1,8 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { ReservationStatus } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, ReservationStatus } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt-auth.guard';
+import {
+  LeituraRelatorio,
+  NomePlataforma,
+  ReservaLida,
+  lerRelatorio,
+  normalizar,
+} from './relatorio.parser';
 
 // Arquivo enviado (compatível com Express.Multer.File, sem depender do tipo).
 type ArquivoUpload = {
@@ -16,30 +23,16 @@ type ResultadoImport = {
   importadas: number;
   atualizadas: number;
   ignoradas: number;
-  porPlataforma: Record<'Airbnb' | 'Booking.com', LinhaResumo>;
+  porPlataforma: Record<NomePlataforma, LinhaResumo>;
   conflitos: string[];
   erros: string[];
-};
-
-// Dados de uma reserva extraídos de uma linha do relatório.
-type ReservaImport = {
-  plataforma: 'Airbnb' | 'Booking.com';
-  codigo: string;
-  hospedeNome: string;
-  hospedeTel: string;
-  propertyId: string;
-  checkin: string; // AAAA-MM-DD
-  checkout: string;
-  noites: number;
-  hospedes: number;
-  valorBruto: number;
-  taxaPlataforma: number;
-  valorLiquido: number;
-  status: ReservationStatus;
+  avisos: string[];
 };
 
 @Injectable()
 export class ImportService {
+  private readonly logger = new Logger(ImportService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async importar(
@@ -56,15 +49,26 @@ export class ImportService {
       },
       conflitos: [],
       erros: [],
+      avisos: [],
     };
 
-    // Cache de imóveis criados/achados durante esta importação (por grupo).
-    const cacheImovel = new Map<string, string>();
+    // Cache de imóveis achados/criados durante esta importação.
+    const cacheImovel = new Map<string, string | null>();
 
     for (const arquivo of arquivos ?? []) {
       try {
-        const rows = this.lerArquivo(arquivo);
-        await this.processarLinhas(user, rows, arquivo.originalname, resumo, cacheImovel);
+        const linhas = this.lerArquivo(arquivo);
+        const leitura = lerRelatorio(linhas);
+
+        this.logger.log(
+          `${arquivo.originalname}: ${leitura.plataforma}, ` +
+            `${leitura.reservas.length} reserva(s), datas em ${leitura.formatoData}.`,
+        );
+        resumo.ignoradas += leitura.ignoradas;
+        for (const aviso of leitura.avisos) {
+          resumo.avisos.push(`${arquivo.originalname}: ${aviso}`);
+        }
+        await this.gravarLeitura(user, leitura, arquivo.originalname, resumo, cacheImovel);
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'erro ao ler';
         resumo.erros.push(`${arquivo.originalname}: ${msg}`);
@@ -80,9 +84,8 @@ export class ImportService {
   private lerArquivo(arquivo: ArquivoUpload): string[][] {
     const ehCsv = /\.csv$/i.test(arquivo.originalname);
     if (ehCsv) {
-      // Lê como texto UTF-8 e preserva as datas (não deixa virar Date).
-      const texto = arquivo.buffer.toString('utf-8');
-      return this.parseCSV(texto);
+      // Lê como texto e preserva as datas (não deixa virar Date).
+      return this.parseCSV(arquivo.buffer.toString('utf-8'));
     }
     const wb = XLSX.read(arquivo.buffer, { type: 'buffer' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -136,134 +139,45 @@ export class ImportService {
     return rows;
   }
 
-  // --- processamento das linhas -----------------------------------------
+  // --- gravação ----------------------------------------------------------
 
-  private async processarLinhas(
+  private async gravarLeitura(
     user: AuthUser,
-    rows: string[][],
+    leitura: LeituraRelatorio,
     nomeArq: string,
     resumo: ResultadoImport,
-    cacheImovel: Map<string, string>,
+    cacheImovel: Map<string, string | null>,
   ) {
-    if (!rows || !rows.length) {
-      resumo.erros.push(`${nomeArq}: vazio`);
-      return;
-    }
-    const head = rows[0].map((x) => String(x).trim());
-    const idx = (name: string) =>
-      head.findIndex((h) => h.toLowerCase() === name.toLowerCase());
-    const has = (name: string) => idx(name) > -1;
-
-    let plat: 'Airbnb' | 'Booking.com' | null = null;
-    if (has('Código de confirmação') || has('Anúncio') || has('Ganhos'))
-      plat = 'Airbnb';
-    else if (has('Número da reserva') || has('Tipo de unidade'))
-      plat = 'Booking.com';
-    if (!plat) {
-      resumo.erros.push(`${nomeArq}: formato não reconhecido`);
-      return;
-    }
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.every((c) => String(c).trim() === '')) continue;
-      const g = (name: string) => {
-        const j = idx(name);
-        return j > -1 ? row[j] ?? '' : '';
-      };
-      // Lê a primeira coluna que existir entre vários nomes possíveis
-      // (o Booking mudou os nomes em relatórios mais novos).
-      const gAlt = (...names: string[]) => {
-        for (const n of names) {
-          const v = g(n);
-          if (String(v).trim() !== '') return v;
-        }
-        return '';
-      };
-
-      let dados: ReservaImport | null = null;
-      if (plat === 'Airbnb') {
-        const ci = this.parseDataFlex(g('Data de início'));
-        const co = this.parseDataFlex(g('Data de término'));
-        if (!ci || !co) {
-          resumo.ignoradas++;
-          continue;
-        }
-        const propId = await this.mapearImovel(user, g('Anúncio'), cacheImovel);
-        if (!propId) {
-          resumo.ignoradas++;
-          continue;
-        }
-        const ganho = this.parseNumBR(g('Ganhos'));
-        const hospedes =
-          (Number(g('Nº de adultos')) || 0) +
-            (Number(g('Nº de crianças')) || 0) +
-            (Number(g('Nº de bebês')) || 0) || 1;
-        dados = {
-          plataforma: 'Airbnb',
-          codigo: String(g('Código de confirmação')).trim(),
-          hospedeNome: String(g('Nome do hóspede')).trim(),
-          hospedeTel: String(g('Entrar em contato')).trim(),
-          propertyId: propId,
-          checkin: ci,
-          checkout: co,
-          noites: Number(g('Nº de noites')) || this.noitesEntre(ci, co),
-          hospedes,
-          valorBruto: ganho,
-          taxaPlataforma: 0,
-          valorLiquido: ganho,
-          status: this.statusPorData(String(g('Status')), ci, co),
-        };
-      } else {
-        // Aceita o formato antigo e o novo do Booking (nomes de coluna mudaram).
-        const ci = this.parseDataFlex(gAlt('Entrada', 'Chegada'));
-        const co = this.parseDataFlex(gAlt('Saída'));
-        if (!ci || !co) {
-          resumo.ignoradas++;
-          continue;
-        }
-        const propId = await this.mapearImovel(
+    for (const reserva of leitura.reservas) {
+      try {
+        const propertyId = await this.mapearImovel(
           user,
-          gAlt('Tipo de unidade', 'Nome da propriedade'),
+          reserva.textoImovel,
           cacheImovel,
         );
-        if (!propId) {
+        if (!propertyId) {
           resumo.ignoradas++;
+          resumo.avisos.push(
+            `${nomeArq}: não identifiquei o imóvel "${reserva.textoImovel}" ` +
+              `(reserva ${reserva.codigo}).`,
+          );
           continue;
         }
-        const preco = this.parseNumBR(gAlt('Preço', 'Pagamento total'));
-        const com = this.parseNumBR(gAlt('Valor da comissão', 'Comissão'));
-        dados = {
-          plataforma: 'Booking.com',
-          codigo: String(gAlt('Número da reserva')).trim(),
-          hospedeNome: String(
-            gAlt(
-              'Nome(s) do(s) hóspede(s)',
-              'Reservado por',
-              'Nome de quem fez a reserva',
-            ),
-          ).trim(),
-          hospedeTel: String(gAlt('Telefone')).trim(),
-          propertyId: propId,
-          checkin: ci,
-          checkout: co,
-          noites: Number(gAlt('Duração (diárias)')) || this.noitesEntre(ci, co),
-          hospedes: Number(gAlt('Pessoas')) || 1,
-          valorBruto: preco,
-          taxaPlataforma: com,
-          valorLiquido: preco - com,
-          status: this.statusPorData(String(gAlt('Status')), ci, co),
-        };
+        await this.gravarReserva(user, reserva, propertyId, resumo);
+      } catch (e) {
+        // Uma reserva com problema não pode derrubar o resto do arquivo.
+        const msg = e instanceof Error ? e.message : String(e);
+        resumo.ignoradas++;
+        resumo.avisos.push(`${nomeArq}: reserva ${reserva.codigo} — ${msg}`);
       }
-
-      await this.gravarReserva(user, dados, resumo);
     }
   }
 
   // Grava (ou atualiza) a reserva, com idempotência por (plataforma, código).
   private async gravarReserva(
     user: AuthUser,
-    dados: ReservaImport,
+    dados: ReservaLida,
+    propertyId: string,
     resumo: ResultadoImport,
   ) {
     const platformId = await this.resolvePlatform(dados.plataforma);
@@ -284,20 +198,24 @@ export class ImportService {
       dados.hospedeTel,
     );
 
-    const comum = {
-      propertyId: dados.propertyId,
+    const comum: Prisma.ReservationUncheckedUpdateInput = {
+      propertyId,
       platformId,
       guestId,
       codigoReserva: dados.codigo || null,
       checkin: this.toDate(dados.checkin),
       checkout: this.toDate(dados.checkout),
       noites: dados.noites,
-      hospedes: dados.hospedes,
       valorBruto: dados.valorBruto,
       taxaPlataforma: dados.taxaPlataforma,
       valorLiquido: dados.valorLiquido,
-      status: dados.status,
+      status: this.status(dados),
     };
+
+    // Campos que o relatório pode não informar: só sobrescreve quando vieram,
+    // para não apagar o que já estava certo no sistema.
+    if (dados.hospedes != null) comum.hospedes = dados.hospedes;
+    if (dados.taxaLimpeza != null) comum.taxaLimpeza = dados.taxaLimpeza;
 
     if (existente) {
       await this.prisma.reservation.update({
@@ -308,56 +226,107 @@ export class ImportService {
       resumo.atualizadas++;
     } else {
       await this.prisma.reservation.create({
-        data: { ...comum, kind: 'BOOKING' },
+        data: {
+          ...(comum as Prisma.ReservationUncheckedCreateInput),
+          hospedes: dados.hospedes ?? 1,
+          kind: 'BOOKING',
+        },
       });
       resumo.porPlataforma[dados.plataforma].nova++;
       resumo.importadas++;
     }
   }
 
-  // --- mapeamento de imóvel (palavras-chave; cria se não existir) --------
-
-  private grupoImovel(
-    texto: string,
-  ): { keys: string[]; nome: string } | null {
-    const t = (texto || '').toLowerCase();
-    if (/wai|cumbuco|sea view/.test(t))
-      return { keys: ['wai', 'cumbuco'], nome: 'Apto Wai Wai Cumbuco' };
-    if (/kennedy|studio|one-bedroom|one bedroom|marco|bernardo|sbc/.test(t))
-      return { keys: ['marco', 'sbc', 'bernardo', 'kennedy'], nome: 'Marco Zero SBC' };
-    return null;
+  // Situação da reserva: cancelada pelo relatório, ou deduzida pelas datas.
+  private status(dados: ReservaLida): ReservationStatus {
+    if (dados.cancelada) return ReservationStatus.CANCELADA;
+    const hoje = this.hojeISO();
+    if (dados.checkout <= hoje) return ReservationStatus.FINALIZADA;
+    if (dados.checkin <= hoje) return ReservationStatus.HOSPEDADO;
+    return ReservationStatus.CONFIRMADA;
   }
 
+  // --- mapeamento de imóvel ---------------------------------------------
+
+  /**
+   * Descobre a qual imóvel pertence o texto do anúncio. Primeiro tenta casar
+   * com os imóveis JÁ CADASTRADOS do usuário (por palavra marcante do nome) —
+   * assim, renomear o anúncio na plataforma não quebra a importação. Só se
+   * nada casar é que usa os apelidos conhecidos e cria o imóvel.
+   */
   private async mapearImovel(
     user: AuthUser,
     texto: string,
-    cache: Map<string, string>,
+    cache: Map<string, string | null>,
   ): Promise<string | null> {
-    const grupo = this.grupoImovel(texto);
-    if (!grupo) return null;
-
-    const chave = grupo.keys[0];
-    const emCache = cache.get(chave);
-    if (emCache) return emCache;
+    const chave = normalizar(texto);
+    if (!chave) return null;
+    if (cache.has(chave)) return cache.get(chave) ?? null;
 
     const imoveis = await this.prisma.property.findMany({
       where: { userId: user.id },
       select: { id: true, nome: true },
     });
-    const achado = imoveis.find((p) =>
-      grupo.keys.some((k) => p.nome.toLowerCase().includes(k)),
-    );
-    if (achado) {
-      cache.set(chave, achado.id);
-      return achado.id;
+
+    // 1) Palavra marcante do nome de um imóvel cadastrado aparece no anúncio.
+    let achado: string | null = null;
+    let melhorPontuacao = 0;
+    for (const imovel of imoveis) {
+      const pontuacao = this.palavrasMarcantes(imovel.nome).filter((p) =>
+        chave.includes(p),
+      ).length;
+      if (pontuacao > melhorPontuacao) {
+        melhorPontuacao = pontuacao;
+        achado = imovel.id;
+      }
     }
 
-    const novo = await this.prisma.property.create({
-      data: { userId: user.id, nome: grupo.nome },
-      select: { id: true },
-    });
-    cache.set(chave, novo.id);
-    return novo.id;
+    // 2) Apelidos conhecidos dos anúncios (fallback).
+    if (!achado) {
+      const grupo = this.grupoConhecido(chave);
+      if (grupo) {
+        const porApelido = imoveis.find((p) =>
+          grupo.keys.some((k) => normalizar(p.nome).includes(k)),
+        );
+        achado =
+          porApelido?.id ??
+          (
+            await this.prisma.property.create({
+              data: { userId: user.id, nome: grupo.nome },
+              select: { id: true },
+            })
+          ).id;
+      }
+    }
+
+    cache.set(chave, achado);
+    return achado;
+  }
+
+  /**
+   * Palavras do nome do imóvel que servem para reconhecê-lo (4 letras ou mais,
+   * fora as palavras comuns que não distinguem nada).
+   */
+  private palavrasMarcantes(nome: string): string[] {
+    const comuns = new Set([
+      'apto', 'apartamento', 'casa', 'studio', 'flat', 'suite', 'quarto',
+      'praia', 'centro', 'residencial', 'resid', 'edificio', 'condominio',
+      'com', 'para', 'sala', 'cozinha', 'vista', 'mar',
+    ]);
+    return normalizar(nome)
+      .split(/[^a-z0-9]+/)
+      .filter((p) => p.length >= 4 && !comuns.has(p));
+  }
+
+  // Apelidos dos anúncios (usados só quando o imóvel ainda não está cadastrado).
+  private grupoConhecido(
+    textoNormalizado: string,
+  ): { keys: string[]; nome: string } | null {
+    if (/wai|cumbuco|sea view/.test(textoNormalizado))
+      return { keys: ['wai', 'cumbuco'], nome: 'Apto Wai Wai Cumbuco' };
+    if (/kennedy|studio|one-bedroom|one bedroom|marco|bernardo|sbc/.test(textoNormalizado))
+      return { keys: ['marco', 'sbc', 'bernardo', 'kennedy'], nome: 'Marco Zero SBC' };
+    return null;
   }
 
   // --- conflitos (possível overbooking) ----------------------------------
@@ -370,25 +339,24 @@ export class ImportService {
         status: { not: ReservationStatus.CANCELADA },
       },
       include: { property: true, guest: true, platform: true },
+      orderBy: [{ propertyId: 'asc' }, { checkin: 'asc' }],
     });
     const out: string[] = [];
     const curto = (d: Date) =>
       `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    // Já vem ordenado por imóvel e data: basta comparar com as vizinhas.
     for (let i = 0; i < ativ.length; i++) {
       for (let j = i + 1; j < ativ.length; j++) {
         const a = ativ[i];
         const b = ativ[j];
-        if (
-          a.propertyId === b.propertyId &&
-          a.checkin < b.checkout &&
-          a.checkout > b.checkin
-        ) {
-          const nomeA = a.guest?.nome || a.platform?.nome || 'reserva';
-          const nomeB = b.guest?.nome || b.platform?.nome || 'reserva';
-          out.push(
-            `${a.property.nome}: ${nomeA} (${a.platform?.nome ?? '—'}, ${curto(a.checkin)}→${curto(a.checkout)}) × ${nomeB} (${b.platform?.nome ?? '—'}, ${curto(b.checkin)}→${curto(b.checkout)})`,
-          );
-        }
+        if (a.propertyId !== b.propertyId) break;
+        if (b.checkin >= a.checkout) break; // as seguintes começam ainda depois
+        const nomeA = a.guest?.nome || a.platform?.nome || 'reserva';
+        const nomeB = b.guest?.nome || b.platform?.nome || 'reserva';
+        out.push(
+          `${a.property.nome}: ${nomeA} (${a.platform?.nome ?? '—'}, ${curto(a.checkin)}→${curto(a.checkout)}) × ${nomeB} (${b.platform?.nome ?? '—'}, ${curto(b.checkin)}→${curto(b.checkout)})`,
+        );
       }
     }
     return out;
@@ -405,18 +373,24 @@ export class ImportService {
     return p.id;
   }
 
+  /**
+   * Mantém o hóspede da reserva. O telefone só é sobrescrito quando o
+   * relatório traz um — o relatório novo do Airbnb não tem essa coluna, e
+   * apagar o telefone que já estava salvo quebraria a Agenda.
+   */
   private async syncGuest(
     existingGuestId: string | null,
     nome: string,
-    telefone: string,
+    telefone: string | null,
   ): Promise<string | null> {
     const limpo = nome?.trim();
     const tel = telefone?.trim() || null;
     if (!limpo) return existingGuestId;
+
     if (existingGuestId) {
       await this.prisma.guest.update({
         where: { id: existingGuestId },
-        data: { nome: limpo, telefone: tel },
+        data: { nome: limpo, ...(tel ? { telefone: tel } : {}) },
       });
       return existingGuestId;
     }
@@ -430,63 +404,8 @@ export class ImportService {
     return new Date(`${ymd}T00:00:00.000Z`);
   }
 
-  private noitesEntre(ci: string, co: string): number {
-    return Math.round(
-      (this.toDate(co).getTime() - this.toDate(ci).getTime()) / 86_400_000,
-    );
-  }
-
   // Hoje (UTC) como AAAA-MM-DD, para comparar com as datas das reservas.
   private hojeISO(): string {
-    const t = new Date();
-    return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
-  }
-
-  private statusPorData(raw: string, ci: string, co: string): ReservationStatus {
-    if (/cancel/i.test(raw || '')) return ReservationStatus.CANCELADA;
-    const h = this.hojeISO();
-    if (co <= h) return ReservationStatus.FINALIZADA;
-    if (ci <= h && co > h) return ReservationStatus.HOSPEDADO;
-    return ReservationStatus.CONFIRMADA;
-  }
-
-  // Número no formato brasileiro: "1.234,56" -> 1234.56.
-  private parseNumBR(s: unknown): number {
-    if (s == null) return 0;
-    let t = String(s).replace(/ /g, ' ').replace(/R\$/i, '').replace(/BRL/i, '').trim();
-    if (t === '') return 0;
-    if (t.indexOf(',') > -1) t = t.replace(/\./g, '').replace(',', '.');
-    t = t.replace(/[^0-9.\-]/g, '');
-    return parseFloat(t) || 0;
-  }
-
-  // Datas flexíveis: ISO, DD/MM/AAAA, DD-MM-AAAA, "17 de maio de 2019"
-  // (por extenso, PT-BR) ou serial do Excel -> AAAA-MM-DD.
-  private parseDataFlex(s: unknown): string | null {
-    if (s == null || s === '') return null;
-    const t = String(s).trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-    const m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-    // Por extenso: "17 de maio de 2019".
-    const meses: Record<string, number> = {
-      janeiro: 1, fevereiro: 2, marco: 3, 'março': 3, abril: 4, maio: 5,
-      junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10,
-      novembro: 11, dezembro: 12,
-    };
-    const mt = t
-      .toLowerCase()
-      .match(/^(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
-    if (mt) {
-      const mm = meses[mt[2]];
-      if (mm) {
-        return `${mt[3]}-${String(mm).padStart(2, '0')}-${mt[1].padStart(2, '0')}`;
-      }
-    }
-    if (/^\d+(\.\d+)?$/.test(t)) {
-      const dt = new Date(Date.UTC(1899, 11, 30) + parseFloat(t) * 86_400_000);
-      return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
-    }
-    return null;
+    return new Date().toISOString().slice(0, 10);
   }
 }
