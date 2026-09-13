@@ -88,6 +88,22 @@ export function dataBR(d: Date): string {
   ).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+/**
+ * Reservas que FECHARAM dentro do período — o critério é o mês do check-out,
+ * o mesmo que as plataformas usam para fechar o mês e o mesmo da tabela
+ * mensal e do gráfico de receita.
+ *
+ * O critério anterior (qualquer reserva que "encostasse" no período, com o
+ * valor inteiro) inflava os meses: uma estadia de 15/10 a 12/12 lançava a
+ * receita cheia em outubro, novembro E dezembro. Somando os 12 meses do dono,
+ * isso dava R$ 49 mil a mais — 34,8% de receita que não existia.
+ *
+ * Consequência assumida da regra: uma estadia que atravessa o período inteiro
+ * (começou antes e termina depois) não entra na receita de nenhum mês do meio;
+ * ela aparece no mês em que terminar. As noites dela, essas sim, continuam
+ * contando na ocupação de cada mês — ocupação é sobre o calendário, não sobre
+ * o fechamento.
+ */
 function reservasNoPeriodo(
   reservas: ReservaMetrica[],
   ini: Date,
@@ -95,14 +111,16 @@ function reservasNoPeriodo(
   filtroImovel: string,
   incluirCancel: boolean,
 ): ReservaMetrica[] {
-  return reservas.filter(
-    (r) =>
+  return reservas.filter((r) => {
+    const co = parseISO(r.checkout);
+    return (
       r.kind === 'BOOKING' &&
       (incluirCancel || r.status !== 'CANCELADA') &&
       (!filtroImovel || r.propertyId === filtroImovel) &&
-      parseISO(r.checkin) <= fim &&
-      parseISO(r.checkout) >= ini,
-  );
+      co >= ini &&
+      co <= fim
+    );
+  });
 }
 
 // Noites vendidas dentro da janela [ini, fim] (interseção).
@@ -162,7 +180,11 @@ export function calcMetricas(
   });
 
   const ocup = noitesDisp > 0 ? (noitesVend / noitesDisp) * 100 : 0;
-  const adr = noitesVend > 0 ? receitaBruta / noitesVend : 0;
+  // Diária média = receita das reservas fechadas ÷ as noites DELAS. Dividir
+  // pela noitesVend (que é do calendário) misturaria dois conjuntos e daria
+  // uma diária maior que a real.
+  const noitesDasReservas = res.reduce((s, r) => s + r.noites, 0);
+  const adr = noitesDasReservas > 0 ? receitaBruta / noitesDasReservas : 0;
   const revpar = noitesDisp > 0 ? receitaBruta / noitesDisp : 0;
   const ticket = res.length > 0 ? receitaBruta / res.length : 0;
   const estadia =
@@ -200,14 +222,8 @@ export function receitaPorSituacao(
   ini: Date,
   fim: Date,
 ): ReceitaSituacao {
-  const res = reservas.filter(
-    (r) =>
-      r.kind === 'BOOKING' &&
-      r.status !== 'CANCELADA' &&
-      (!filtroImovel || r.propertyId === filtroImovel) &&
-      parseISO(r.checkin) <= fim &&
-      parseISO(r.checkout) >= ini,
-  );
+  // Mesmo conjunto dos KPIs: reservas que fecharam no período.
+  const res = reservasNoPeriodo(reservas, ini, fim, filtroImovel, false);
   let concluida = 0;
   let andamento = 0;
   let futura = 0;
