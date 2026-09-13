@@ -599,3 +599,64 @@ export function tabelaPorMes(
     .filter((l) => l.reservas > 0 || l.noites > 0 || l.custos !== 0)
     .reverse();
 }
+
+// --- Reservas futuras, mês a mês --------------------------------------
+
+export type LinhaFuturo = {
+  chave: string; // 'AAAA-MM'
+  ano: number;
+  mes: number; // 0-11
+  reservas: number;
+  porPlataforma: Record<string, number>;
+  noites: number;
+  receitaLiquida: number;
+};
+
+/**
+ * O que já está contratado e ainda não começou, separado por mês de CHECK-IN
+ * (é a pergunta "quem chega quando e quanto isso rende"). Não depende do
+ * período escolhido no Painel: futuro é futuro.
+ *
+ * A soma da receita bate com o cartão "Receita futura", que usa o mesmo
+ * critério: reservas confirmadas ou pendentes com check-in a partir de amanhã.
+ */
+export function futuroPorMes(
+  reservas: ReservaMetrica[],
+  filtroImovel: string,
+): LinhaFuturo[] {
+  const h = hojeDate();
+  const futuras = reservas.filter(
+    (r) =>
+      r.kind === 'BOOKING' &&
+      (r.status === 'CONFIRMADA' || r.status === 'PENDENTE') &&
+      (!filtroImovel || r.propertyId === filtroImovel) &&
+      parseISO(r.checkin) > h,
+  );
+
+  const mapa = new Map<string, LinhaFuturo>();
+  for (const r of futuras) {
+    const ci = parseISO(r.checkin);
+    const chave = `${ci.getFullYear()}-${String(ci.getMonth() + 1).padStart(2, '0')}`;
+    let linha = mapa.get(chave);
+    if (!linha) {
+      linha = {
+        chave,
+        ano: ci.getFullYear(),
+        mes: ci.getMonth(),
+        reservas: 0,
+        porPlataforma: {},
+        noites: 0,
+        receitaLiquida: 0,
+      };
+      mapa.set(chave, linha);
+    }
+    const canal = r.plataforma || 'Outra';
+    linha.reservas += 1;
+    linha.porPlataforma[canal] = (linha.porPlataforma[canal] ?? 0) + 1;
+    linha.noites += r.noites;
+    linha.receitaLiquida += r.valorLiquido;
+  }
+
+  // Do mês mais próximo para o mais distante.
+  return [...mapa.values()].sort((a, b) => (a.chave < b.chave ? -1 : 1));
+}
