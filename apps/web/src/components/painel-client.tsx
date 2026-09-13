@@ -399,9 +399,14 @@ export function PainelClient() {
             />
           </div>
           <p className="mb-6 text-xs text-tinta-suave">
-            Os indicadores acima consideram todas as reservas do período, exceto
-            canceladas. Esta faixa mostra quanto já se realizou e quanto ainda
-            está por vir (os três somam a Receita líquida).
+            Os indicadores acima contam as reservas que <strong>fecharam</strong> no
+            período — ou seja, cujo <strong>check-out</strong> caiu dentro dele —,
+            exceto canceladas. É o mesmo critério com que as plataformas fecham o
+            mês, e é o que faz os meses somarem o total sem contar nada duas vezes.
+            Uma estadia que começou antes e ainda não terminou aparece no mês em que
+            terminar; as noites dela seguem contando na ocupação de cada mês. Esta
+            faixa mostra quanto já se realizou e quanto ainda está por vir (os três
+            somam a Receita líquida).
           </p>
 
           {/* reservas futuras, mês a mês */}
@@ -666,11 +671,9 @@ export function PainelClient() {
                   mês só. “Estadia” é a média de noites por reserva.
                 </p>
                 <p>
-                  Por isso o <strong>Total fechado</strong> pode ficar abaixo do
-                  número de reservas lá em cima: os KPIs do topo contam toda reserva
-                  que <em>encosta</em> no período, e uma hospedagem que só termina
-                  depois do fim da janela ainda não fechou nenhum mês. As{' '}
-                  <strong>noites</strong>, essas sim, batem exatamente com o topo.
+                  Os indicadores do topo usam <strong>o mesmo critério</strong>, então
+                  o <strong>Total fechado</strong> bate com eles, e os meses somados
+                  dão o total do período — não há número contado duas vezes.
                 </p>
               </div>
             </Secao>
