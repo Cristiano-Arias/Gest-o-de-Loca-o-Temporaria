@@ -338,7 +338,7 @@ function TabelaFixos({
             <th className="px-4 py-3 font-medium">Imóvel</th>
             <th className="px-4 py-3 font-medium">Categoria</th>
             <th className="px-4 py-3 text-right font-medium">Valor mensal</th>
-            <th className="px-4 py-3 font-medium">Status do mês</th>
+            <th className="hidden px-4 py-3 font-medium sm:table-cell">Status do mês</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -354,7 +354,7 @@ function TabelaFixos({
               <td className="px-4 py-3 text-right align-top font-semibold text-tinta">
                 {brl(f.valorMensal)}
               </td>
-              <td className="px-4 py-3 align-top">
+              <td className="hidden px-4 py-3 align-top sm:table-cell">
                 {f.lancadoNoMes ? (
                   <span className="inline-block rounded-full bg-verde/15 px-2.5 py-0.5 text-xs font-semibold text-verde">
                     Lançado no mês
@@ -426,11 +426,11 @@ function ModalFixo({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/40 p-4 sm:p-8"
+      className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto bg-tinta/40 p-0 sm:items-start sm:p-8"
       onClick={onFechar}
     >
       <div
-        className="w-full max-w-lg rounded-carias bg-superficie p-6 shadow-carias"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-carias bg-superficie p-4 shadow-carias sm:max-h-none sm:rounded-carias sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -462,7 +462,7 @@ function ModalFixo({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={ROTULO}>Categoria *</label>
               <select

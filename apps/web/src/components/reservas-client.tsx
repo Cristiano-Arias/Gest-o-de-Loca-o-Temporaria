@@ -624,7 +624,7 @@ function TabelaReservas({
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 font-medium">Hóspede / Imóvel</th>
             <th className="px-4 py-3 font-medium">Período</th>
-            <th className="px-4 py-3 font-medium">Código</th>
+            <th className="hidden px-4 py-3 font-medium sm:table-cell">Código</th>
             <th className="px-4 py-3 text-right font-medium">Valor líquido</th>
             <th className="px-4 py-3" />
           </tr>
@@ -667,7 +667,7 @@ function TabelaReservas({
                     {!bloqueio ? ` · ${r.hospedes || 1} hósp.` : ''}
                   </div>
                 </td>
-                <td className="px-4 py-3 align-top text-tinta-suave">
+                <td className="hidden px-4 py-3 align-top text-tinta-suave sm:table-cell">
                   {bloqueio ? '—' : r.codigo || '—'}
                 </td>
                 <td className="px-4 py-3 text-right align-top">
@@ -731,11 +731,11 @@ function Moldura({
 }) {
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/40 p-4 sm:p-8"
+      className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto bg-tinta/40 p-0 sm:items-start sm:p-8"
       onClick={onFechar}
     >
       <div
-        className="w-full max-w-xl rounded-carias bg-superficie p-6 shadow-carias"
+        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-carias bg-superficie p-4 shadow-carias sm:max-h-none sm:rounded-carias sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -800,7 +800,7 @@ function ModalReserva({
       onFechar={onFechar}
       onSalvar={onSalvar}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className={ROTULO}>Imóvel *</label>
           <select
@@ -831,7 +831,7 @@ function ModalReserva({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className={ROTULO}>Hóspede</label>
           <input
@@ -852,7 +852,7 @@ function ModalReserva({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div>
           <label className={ROTULO}>Check-in *</label>
           <input
@@ -883,7 +883,7 @@ function ModalReserva({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div>
           <label className={ROTULO}>Valor bruto (R$)</label>
           <input
@@ -921,7 +921,7 @@ function ModalReserva({
         <strong>{brl(liquido)}</strong>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className={ROTULO}>Status</label>
           <select
@@ -991,7 +991,7 @@ function ModalBloqueio({
           ))}
         </select>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className={ROTULO}>De *</label>
           <input

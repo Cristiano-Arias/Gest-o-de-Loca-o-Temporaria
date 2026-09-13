@@ -193,7 +193,7 @@ export function PainelClient() {
       subtitulo="Receita realizada, deste mês e contratada"
       acao={
         !semImoveis ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2">
             {imoveis.length > 1 ? (
               <select
                 value={filtroImovel}
@@ -286,7 +286,7 @@ export function PainelClient() {
           </p>
 
           {/* os três tempos */}
-          <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Tempo
               cor={COR_PASSADO}
               rotulo="Realizado"
@@ -370,6 +370,13 @@ export function PainelClient() {
                 'r',
                 ...canais.map(() => 'r' as const),
                 'r', 'r', 'r', 'r', 'r', 'r', 'r',
+              ]}
+              // No celular ficam só período, reservas, receita e lucro.
+              secundarias={[
+                false,
+                false,
+                ...canais.map(() => true),
+                true, true, true, false, true, true, false,
               ]}
             >
               {anos.map((bloco) => {
@@ -483,20 +490,27 @@ function Numeros({
     <>
       <td className={`px-2.5 py-2 text-right ${f}`}>{t.reservas}</td>
       {canais.map((c) => (
-        <td key={c} className="px-2.5 py-2 text-right text-tinta-suave">
+        <td
+          key={c}
+          className="hidden px-2.5 py-2 text-right text-tinta-suave md:table-cell"
+        >
           {t.porPlataforma[c] ?? 0}
         </td>
       ))}
-      <td className={`px-2.5 py-2 text-right ${f}`}>{t.noites}</td>
-      <td className="px-2.5 py-2 text-right text-tinta-suave">
+      <td className={`hidden px-2.5 py-2 text-right md:table-cell ${f}`}>
+        {t.noites}
+      </td>
+      <td className="hidden px-2.5 py-2 text-right text-tinta-suave md:table-cell">
         {dec1(t.estadia)}
       </td>
-      <td className="px-2.5 py-2 text-right text-tinta-suave">{pct(t.ocup)}</td>
+      <td className="hidden px-2.5 py-2 text-right text-tinta-suave md:table-cell">
+        {pct(t.ocup)}
+      </td>
       <td className={`px-2.5 py-2 text-right ${f}`}>{brl(t.receitaLiquida)}</td>
-      <td className="px-2.5 py-2 text-right text-tinta-suave">
+      <td className="hidden px-2.5 py-2 text-right text-tinta-suave md:table-cell">
         {brl(t.comissao)}
       </td>
-      <td className={`px-2.5 py-2 text-right ${f}`}>
+      <td className={`hidden px-2.5 py-2 text-right md:table-cell ${f}`}>
         {semCustos ? '—' : brl(t.custos)}
       </td>
       <td
@@ -546,10 +560,13 @@ function Secao({
 function Tabela({
   cabecalho,
   alinhar,
+  secundarias,
   children,
 }: {
   cabecalho: string[];
   alinhar: ('l' | 'r')[];
+  /** Colunas que somem no celular, para a tabela caber sem arrastar. */
+  secundarias?: boolean[];
   children: React.ReactNode;
 }) {
   return (
@@ -562,7 +579,7 @@ function Tabela({
                 key={c}
                 className={`px-2.5 py-2.5 font-medium ${
                   alinhar[i] === 'r' ? 'text-right' : 'text-left'
-                }`}
+                } ${secundarias?.[i] ? 'hidden md:table-cell' : ''}`}
               >
                 {c}
               </th>

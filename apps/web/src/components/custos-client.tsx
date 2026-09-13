@@ -450,7 +450,7 @@ function TabelaCustos({
           <tr className="border-b border-borda text-left text-xs uppercase tracking-wide text-tinta-suave">
             <th className="px-4 py-3 font-medium">Mês</th>
             <th className="px-4 py-3 font-medium">Categoria</th>
-            <th className="px-4 py-3 font-medium">Imóvel / Descrição</th>
+            <th className="hidden px-4 py-3 font-medium sm:table-cell">Imóvel / Descrição</th>
             <th className="px-4 py-3 text-right font-medium">Valor</th>
             <th className="px-4 py-3 font-medium">Pagamento</th>
             <th className="px-4 py-3" />
@@ -467,7 +467,7 @@ function TabelaCustos({
                   {catLabel(c.categoria)}
                 </span>
               </td>
-              <td className="px-4 py-3 align-top">
+              <td className="hidden px-4 py-3 align-top sm:table-cell">
                 <div className="text-tinta">{c.propertyNome}</div>
                 {c.descricao ? (
                   <div className="text-xs text-tinta-suave">{c.descricao}</div>
@@ -542,11 +542,11 @@ function ModalCusto({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/40 p-4 sm:p-8"
+      className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto bg-tinta/40 p-0 sm:items-start sm:p-8"
       onClick={onFechar}
     >
       <div
-        className="w-full max-w-lg rounded-carias bg-superficie p-6 shadow-carias"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-carias bg-superficie p-4 shadow-carias sm:max-h-none sm:rounded-carias sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -563,7 +563,7 @@ function ModalCusto({
         </div>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={ROTULO}>Imóvel *</label>
               <select
@@ -589,7 +589,7 @@ function ModalCusto({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={ROTULO}>Categoria *</label>
               <select

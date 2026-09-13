@@ -634,11 +634,11 @@ function ModalContrato({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/40 p-4 sm:p-8"
+      className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto bg-tinta/40 p-0 sm:items-start sm:p-8"
       onClick={onFechar}
     >
       <div
-        className="w-full max-w-xl rounded-carias bg-superficie p-6 shadow-carias"
+        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-carias bg-superficie p-4 shadow-carias sm:max-h-none sm:rounded-carias sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -684,7 +684,7 @@ function ModalContrato({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={rotulo}>Telefone</label>
               <input
@@ -721,7 +721,7 @@ function ModalContrato({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={rotulo}>Aluguel mensal (R$) *</label>
               <input
@@ -750,7 +750,7 @@ function ModalContrato({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={rotulo}>Outros custos / mês (R$)</label>
               <input
@@ -780,7 +780,7 @@ function ModalContrato({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={rotulo}>Início *</label>
               <input

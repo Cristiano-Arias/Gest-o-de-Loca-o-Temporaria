@@ -376,11 +376,11 @@ export function AgendaClient() {
               ))}
               {celulas.map((c, i) =>
                 c.dia === null ? (
-                  <div key={`v-${i}`} className="min-h-[84px] rounded-lg" />
+                  <div key={`v-${i}`} className="min-h-[56px] rounded-lg md:min-h-[84px]" />
                 ) : (
                   <div
                     key={c.iso}
-                    className={`min-h-[84px] rounded-lg border p-1 ${
+                    className={`min-h-[56px] rounded-lg border p-1 md:min-h-[84px] ${
                       c.hoje
                         ? 'border-coral bg-coral/5'
                         : 'border-borda bg-white'
@@ -466,7 +466,7 @@ export function AgendaClient() {
                 Nenhuma reserva ou bloqueio neste mês.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b border-borda-forte text-left text-xs uppercase tracking-wide text-tinta-suave">
@@ -556,6 +556,68 @@ export function AgendaClient() {
                 </table>
               </div>
             )}
+            {/* no celular, cada reserva vira um cartão em vez de linha */}
+            <div className="space-y-2 md:hidden">
+              {doMes.map((r) => {
+                const bloqueio = r.kind === 'BLOCK';
+                const h = horarios.get(r.propertyId);
+                return (
+                  <div
+                    key={r.id}
+                    className="rounded-carias border border-borda bg-areia/30 p-3"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <strong className="text-tinta">
+                        {bloqueio ? 'Bloqueio' : r.hospedeNome || 'Hóspede'}
+                      </strong>
+                      {r.checkin >= isoOf(hoje) ? (
+                        <span className="whitespace-nowrap text-xs font-semibold text-coral">
+                          {diasAte(r.checkin)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-xs text-tinta-suave">
+                      {r.propertyNome}
+                      {bloqueio ? '' : ` · ${r.plataforma || '—'}`}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                      <span className="font-semibold text-tinta">
+                        {brDate(r.checkin)}
+                      </span>
+                      <span className="text-xs text-tinta-suave">
+                        {h?.checkin ?? '15:00'}
+                      </span>
+                      <span className="text-tinta-suave">→</span>
+                      <span className="text-tinta">{brDate(r.checkout)}</span>
+                      <span className="text-xs text-tinta-suave">
+                        {h?.checkout ?? '11:00'}
+                      </span>
+                      <span className="text-xs text-tinta-suave">
+                        · {r.noites} dia(s)
+                        {bloqueio ? '' : ` · ${r.hospedes || 1} hósp.`}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      {r.hospedeTel ? (
+                        <a
+                          href={`tel:${r.hospedeTel.replace(/[^0-9+]/g, '')}`}
+                          className="rounded-lg border border-mar/30 bg-mar/10 px-3 py-1.5 text-xs font-semibold text-mar"
+                        >
+                          Ligar {r.hospedeTel}
+                        </a>
+                      ) : null}
+                      <button
+                        onClick={() => abrirReserva(r)}
+                        className="rounded-lg border border-borda-forte px-3 py-1.5 text-xs font-medium text-tinta"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             <p className="mt-2 text-xs text-tinta-suave">
               Inclui toda reserva que encosta no período — inclusive as que
               começaram antes ou terminam depois. Canceladas ficam de fora. Os{' '}
