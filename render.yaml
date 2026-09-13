@@ -9,7 +9,10 @@
 
 databases:
   - name: carias-db
-    plan: free
+    # Precisa ser IGUAL ao plano do banco que já existe no Render: o Render
+    # recusa a sincronização se este arquivo pedir um plano menor do que o
+    # banco atual ("cannot downgrade database from Basic-256mb to Free").
+    plan: basic-256mb
 
 services:
   # ---- API (NestJS + Prisma) ----
