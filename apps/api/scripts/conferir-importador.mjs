@@ -51,11 +51,17 @@ console.log('\nAirbnb — relatório novo (extrato financeiro)');
     '08/21/2026,Reserva,HMAM94TAB8,08/14/2026,08/24/2026,10,Natasha,Studio Av. Kennedy,BRL,839.24,"186,88",0.00,1003.40',
     '08/17/2026,Reserva,HMAM94TAB8,08/14/2026,08/24/2026,10,Natasha,Studio Av. Kennedy,BRL,1025.54,"228,37",0.00,1226.18',
     '07/01/2025,Taxa de Cancelamento,HMEEPD2TRR,08/01/2025,08/03/2025,2,Luis,Wai Wai Cumbuco,BRL,-286.56,0.00,0.00,0.00',
+    // Reserva desfeita por acordo e remarcada sob outro codigo: o ajuste
+    // estorna o valor inteiro. Se nao contar como cancelada, ela vira um
+    // falso "conflito de agenda" com a reserva que a substituiu.
+    '08/23/2019,Reserva,HMAC3KB5D5,08/21/2019,08/27/2019,6,Andressa,Wai Wai Cumbuco,BRL,2042.82,"63,18",0.00,2106.00',
+    '08/23/2019,Ajuste de Resolução,HMAC3KB5D5,08/21/2019,08/27/2019,6,Andressa,Wai Wai Cumbuco,BRL,-2043.00,,,',
+    '08/23/2019,Reserva,HMACTEZWN9,08/21/2019,08/27/2019,6,Andressa,Wai Wai Cumbuco,BRL,1280.40,"39,60",0.00,1320.00',
   ].join('\n');
   const r = lerRelatorio(parseCSV(csv));
   conferir('reconhece a plataforma', 'Airbnb', r.plataforma);
   conferir('descobre que as datas são americanas', 'MDY', r.formatoData);
-  conferir('ignora a linha de repasse (Payout)', 2, r.reservas.length);
+  conferir('ignora a linha de repasse (Payout)', 4, r.reservas.length);
   const a = r.reservas.find((x) => x.codigo === 'HMAM94TAB8');
   conferir('soma as 2 linhas da mesma reserva', 1864.78, a.valorLiquido);
   conferir('soma a comissão das 2 linhas', 415.25, a.taxaPlataforma);
@@ -63,6 +69,10 @@ console.log('\nAirbnb — relatório novo (extrato financeiro)');
   conferir('lê a data no formato certo', ['2026-08-14', '2026-08-24'], [a.checkin, a.checkout]);
   const c = r.reservas.find((x) => x.codigo === 'HMEEPD2TRR');
   conferir('só taxa de cancelamento = reserva cancelada', true, c.cancelada);
+  const estornada = r.reservas.find((x) => x.codigo === 'HMAC3KB5D5');
+  conferir('reserva estornada por acordo = cancelada', true, estornada.cancelada);
+  const remarcada = r.reservas.find((x) => x.codigo === 'HMACTEZWN9');
+  conferir('a remarcada no lugar dela segue ativa', false, remarcada.cancelada);
 }
 
 // --- caso 2: relatório ANTIGO do Airbnb (uma linha por reserva, datas DD/MM)
