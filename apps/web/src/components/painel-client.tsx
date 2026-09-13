@@ -12,6 +12,7 @@ import {
   type LinhaMes,
   type TotaisPeriodo,
   periodoRange,
+  dataBR,
   plataformasPresentes,
   tresTempos,
   serieReceita6x6,
@@ -42,6 +43,10 @@ export function PainelClient() {
   const [anosAbertos, setAnosAbertos] = useState<number[]>([
     new Date().getFullYear(),
   ]);
+  // Recorte da tabela ano a ano: 'tudo', um ano ('2026') ou 'custom'.
+  const [recorte, setRecorte] = useState('tudo');
+  const [de, setDe] = useState('');
+  const [ate, setAte] = useState('');
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -97,6 +102,18 @@ export function PainelClient() {
     [custos, semCustos],
   );
 
+  // Anos que têm dados, para o seletor de período.
+  const anosDisponiveis = useMemo(() => {
+    const set = new Set<number>();
+    for (const r of reservasVis) {
+      if (r.kind === 'BOOKING' && r.status !== 'CANCELADA') {
+        set.add(Number(r.checkout.slice(0, 4)));
+      }
+    }
+    for (const c of custosVis) set.add(Number(c.data.slice(0, 4)));
+    return [...set].sort((a, b) => b - a);
+  }, [reservasVis, custosVis]);
+
   // --- cálculos --------------------------------------------------------
 
   const tempos = useMemo(
@@ -109,17 +126,33 @@ export function PainelClient() {
     [reservasVis, filtroImovel],
   );
 
-  const regua = useMemo(() => {
-    const [ini, fim] = periodoRange('tudo', reservasVis, custosVis);
-    return tabelaPorMes(
-      reservasVis,
-      custosVis,
-      imoveis.length,
-      filtroImovel,
-      ini,
-      fim,
-    );
-  }, [reservasVis, custosVis, imoveis.length, filtroImovel]);
+  // Intervalo da tabela, conforme o recorte escolhido.
+  const [ini, fim] = useMemo<[Date, Date]>(() => {
+    if (recorte === 'custom') {
+      const inteiro = periodoRange('tudo', reservasVis, custosVis);
+      const d = de ? new Date(`${de}T00:00:00`) : inteiro[0];
+      const a = ate ? new Date(`${ate}T00:00:00`) : inteiro[1];
+      return a >= d ? [d, a] : [a, d];
+    }
+    if (recorte !== 'tudo') {
+      const ano = Number(recorte);
+      return [new Date(ano, 0, 1), new Date(ano, 11, 31)];
+    }
+    return periodoRange('tudo', reservasVis, custosVis);
+  }, [recorte, de, ate, reservasVis, custosVis]);
+
+  const regua = useMemo(
+    () =>
+      tabelaPorMes(
+        reservasVis,
+        custosVis,
+        imoveis.length,
+        filtroImovel,
+        ini,
+        fim,
+      ),
+    [reservasVis, custosVis, imoveis.length, filtroImovel, ini, fim],
+  );
 
   const anos = useMemo(() => agruparPorAno(regua), [regua]);
   const geral = useMemo(() => somarMeses(regua), [regua]);
@@ -136,6 +169,12 @@ export function PainelClient() {
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
   }, [regua]);
+
+  useEffect(() => {
+    if (recorte !== 'tudo' && recorte !== 'custom') {
+      setAnosAbertos([Number(recorte)]);
+    }
+  }, [recorte]);
 
   function alternarAno(ano: number) {
     setAnosAbertos((atual) =>
@@ -182,6 +221,37 @@ export function PainelClient() {
                   </option>
                 ))}
               </select>
+            ) : null}
+            <select
+              value={recorte}
+              onChange={(e) => setRecorte(e.target.value)}
+              className="rounded-lg border border-borda-forte bg-white px-3 py-2 text-sm text-tinta"
+            >
+              <option value="tudo">Todo o período</option>
+              {anosDisponiveis.map((a) => (
+                <option key={a} value={String(a)}>
+                  Ano de {a}
+                </option>
+              ))}
+              <option value="custom">Escolher datas…</option>
+            </select>
+            {recorte === 'custom' ? (
+              <div className="flex items-center gap-1.5 rounded-lg border border-borda-forte bg-white px-2 py-1 text-sm text-tinta">
+                <span className="text-xs text-tinta-suave">de</span>
+                <input
+                  type="date"
+                  value={de}
+                  onChange={(e) => setDe(e.target.value)}
+                  className="bg-transparent text-sm text-tinta outline-none"
+                />
+                <span className="text-xs text-tinta-suave">até</span>
+                <input
+                  type="date"
+                  value={ate}
+                  onChange={(e) => setAte(e.target.value)}
+                  className="bg-transparent text-sm text-tinta outline-none"
+                />
+              </div>
             ) : null}
           </div>
         ) : undefined
@@ -259,7 +329,10 @@ export function PainelClient() {
                       ? COR_ATUAL
                       : COR_FUTURO,
                 )}
+                divisor={serie.findIndex((p) => p.tempo === 'atual')}
                 mostrarValores
+                eixoY
+                alta
               />
             </CartaoGrafico>
             <div className="mt-2 flex flex-wrap gap-4 text-xs text-tinta-suave">
@@ -270,7 +343,15 @@ export function PainelClient() {
           </div>
 
           {/* consolidado anual, com os meses por dentro */}
-          <Secao titulo="Ano a ano — clique no ano para ver os meses">
+          <Secao
+            titulo={
+              recorte === 'tudo'
+                ? 'Ano a ano — clique no ano para ver os meses'
+                : recorte === 'custom'
+                  ? `Período escolhido — ${dataBR(ini)} a ${dataBR(fim)}`
+                  : `Ano de ${recorte}`
+            }
+          >
             <Tabela
               cabecalho={[
                 'Período',
@@ -331,7 +412,9 @@ export function PainelClient() {
               <strong>Noites e ocupação</strong> contam as noites que caíram dentro
               de cada mês, para que uma estadia longa não infle um mês só.{' '}
               <strong>Estadia</strong> é a média de noites por reserva.{' '}
-              Canceladas ficam de fora de tudo.
+              Canceladas ficam de fora de tudo. O filtro de período recorta{' '}
+              <em>esta tabela</em>; os três cartões e o gráfico são sempre em
+              relação a hoje.
             </p>
           </Secao>
 

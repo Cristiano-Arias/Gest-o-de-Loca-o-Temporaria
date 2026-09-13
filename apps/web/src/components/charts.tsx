@@ -51,12 +51,21 @@ export function BarrasVerticais({
   cores,
   mostrarValores,
   tendencia,
+  divisor,
+  eixoY,
+  alta,
 }: {
   labels: string[];
   valores: number[];
   cores?: string[];
   mostrarValores?: boolean;
   tendencia?: boolean;
+  /** Índice da primeira barra "do futuro": marca a linha do hoje. */
+  divisor?: number;
+  /** Mostra os valores de referência no eixo vertical. */
+  eixoY?: boolean;
+  /** Versão mais alta, para gráficos com muitas barras. */
+  alta?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -64,18 +73,28 @@ export function BarrasVerticais({
   if (!valores.some((v) => v > 0)) return <SemDados />;
   const max = Math.max(...valores, 1);
   const W = 360;
-  const H = 188;
+  const H = alta ? 232 : 188;
   const padT = 18;
   const padB = 22;
-  const padX = 8;
+  const padL = eixoY ? 34 : 8;
+  const padR = 8;
   const n = valores.length;
-  const slot = (W - padX * 2) / n;
-  const barW = Math.min(slot * 0.6, 34);
+  const slot = (W - padL - padR) / n;
+  const barW = Math.min(slot * 0.62, 34);
   const area = H - padT - padB;
-  const cx = (i: number) => padX + slot * i + slot / 2;
+  const cx = (i: number) => padL + slot * i + slot / 2;
   const alturaBarra = (v: number) => (v / max) * area;
   const topo = (v: number) => padT + (area - alturaBarra(v));
-  const grades = [0.25, 0.5, 0.75, 1].map((f) => padT + area - f * area);
+  const fracoes = [0, 0.25, 0.5, 0.75, 1];
+  const grades = fracoes.map((f) => ({
+    y: padT + area - f * area,
+    valor: max * f,
+  }));
+  // Posição da linha do "hoje", entre a última barra passada e a atual.
+  const xDivisor =
+    divisor != null && divisor > 0 && divisor < n
+      ? padL + slot * divisor
+      : null;
 
   let pontosTendencia = '';
   if (tendencia && n > 1) {
@@ -95,7 +114,7 @@ export function BarrasVerticais({
 
   return (
     <div
-      className="relative h-44"
+      className={`relative ${alta ? 'h-60' : 'h-44'}`}
       onMouseMove={(e) => setPos(posRelativa(e))}
       onMouseLeave={() => {
         setHover(null);
@@ -110,17 +129,65 @@ export function BarrasVerticais({
           </linearGradient>
         </defs>
 
-        {grades.map((y, i) => (
-          <line
-            key={i}
-            x1={padX}
-            y1={y}
-            x2={W - padX}
-            y2={y}
-            stroke="#eef2f2"
-            strokeWidth={1}
+        {/* faixa de fundo marcando o que ainda não aconteceu */}
+        {xDivisor != null ? (
+          <rect
+            x={xDivisor}
+            y={padT}
+            width={W - padR - xDivisor}
+            height={area}
+            fill="#e9a13b"
+            opacity={0.06}
           />
+        ) : null}
+
+        {grades.map((g, i) => (
+          <g key={i}>
+            <line
+              x1={padL}
+              y1={g.y}
+              x2={W - padR}
+              y2={g.y}
+              stroke="#eef2f2"
+              strokeWidth={1}
+            />
+            {eixoY && i > 0 ? (
+              <text
+                x={padL - 5}
+                y={g.y + 3}
+                textAnchor="end"
+                fontSize={7.5}
+                fill="#9fb3b7"
+              >
+                {brlCompacto(g.valor)}
+              </text>
+            ) : null}
+          </g>
         ))}
+
+        {/* linha do hoje */}
+        {xDivisor != null ? (
+          <g>
+            <line
+              x1={xDivisor}
+              y1={padT - 12}
+              x2={xDivisor}
+              y2={padT + area}
+              stroke="#e07a5f"
+              strokeWidth={1.2}
+              strokeDasharray="3 3"
+            />
+            <text
+              x={xDivisor + 3}
+              y={padT - 6}
+              fontSize={7.5}
+              fontWeight={700}
+              fill="#e07a5f"
+            >
+              hoje
+            </text>
+          </g>
+        ) : null}
 
         {valores.map((v, i) => (
           <g
@@ -130,7 +197,7 @@ export function BarrasVerticais({
           >
             {/* área sensível ao mouse (cobre o slot todo) */}
             <rect
-              x={padX + slot * i}
+              x={padL + slot * i}
               y={padT}
               width={slot}
               height={area}
