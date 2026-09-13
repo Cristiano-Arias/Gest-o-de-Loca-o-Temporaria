@@ -42,7 +42,17 @@ function addDias(dt: Date, n: number): Date {
 
 export type PeriodoSel = 'mes' | '30' | '90' | '365' | 'ano' | 'tudo';
 
-// Intervalo de datas do período selecionado (espelha periodoRange()).
+/**
+ * Intervalo de datas do período escolhido.
+ *
+ * As janelas "30 / 90 / 365" olham para TRÁS (últimos N dias): indicador
+ * financeiro mede o que já aconteceu. O que ainda vai acontecer aparece
+ * separado, no cartão "Receita futura" e na faixa Concluída/Em andamento/Futura.
+ *
+ * "Este mês" e "Este ano" são o mês e o ano do calendário inteiros — incluem
+ * dias que ainda não chegaram, e é justamente a faixa de situação que mostra
+ * quanto daquilo já se realizou.
+ */
 export function periodoRange(
   periodo: PeriodoSel,
   reservas: ReservaMetrica[],
@@ -68,7 +78,14 @@ export function periodoRange(
   if (periodo === 'ano') {
     return [new Date(h.getFullYear(), 0, 1), new Date(h.getFullYear(), 11, 31)];
   }
-  return [h, addDias(h, Number(periodo))];
+  return [addDias(h, -Number(periodo)), h];
+}
+
+// Data como 'DD/MM/AAAA' para mostrar ao usuário qual janela está valendo.
+export function dataBR(d: Date): string {
+  return `${String(d.getDate()).padStart(2, '0')}/${String(
+    d.getMonth() + 1,
+  ).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
 function reservasNoPeriodo(
@@ -463,4 +480,122 @@ export function metricasPlataforma(
     cancel,
     taxaCancel,
   };
+}
+
+// --- Desempenho mês a mês ---------------------------------------------
+
+export type LinhaMes = {
+  chave: string; // 'AAAA-MM'
+  ano: number;
+  mes: number; // 0-11
+  reservas: number;
+  porPlataforma: Record<string, number>; // nome do canal -> nº de reservas
+  noites: number; // noites efetivamente dentro do mês
+  estadia: number; // média de noites das reservas do mês
+  ocup: number; // % do mês ocupado
+  receitaLiquida: number;
+  comissao: number;
+  custos: number;
+  lucro: number;
+};
+
+/**
+ * Uma linha por mês, do mais recente para o mais antigo, dentro da janela
+ * escolhida. Duas contagens diferentes convivem aqui, de propósito:
+ *
+ *  - Reservas, receita e comissão entram no mês do CHECK-OUT, que é como as
+ *    plataformas fecham o mês (e é o mesmo critério do gráfico de receita).
+ *  - Noites e ocupação contam as noites que caíram DENTRO do mês, senão uma
+ *    estadia de 58 noites inflaria um mês só.
+ */
+export function tabelaPorMes(
+  reservas: ReservaMetrica[],
+  custos: CustoMetrica[],
+  totalImoveis: number,
+  filtroImovel: string,
+  ini: Date,
+  fim: Date,
+): LinhaMes[] {
+  const ativas = reservasAtivas(reservas, filtroImovel);
+  const numImoveis = filtroImovel ? 1 : Math.max(totalImoveis, 1);
+
+  // Meses cobertos pela janela (do primeiro dia do mês de início ao fim).
+  const linhas: LinhaMes[] = [];
+  const cursor = new Date(ini.getFullYear(), ini.getMonth(), 1);
+  while (cursor <= fim) {
+    const ano = cursor.getFullYear();
+    const mes = cursor.getMonth();
+    const primeiro = new Date(ano, mes, 1);
+    // Fim do mês como o PRIMEIRO DIA DO MÊS SEGUINTE (limite aberto). Usar o
+    // último dia perderia a noite da virada: uma estadia de 28/01 a 03/02
+    // contaria 3 noites em janeiro e 2 em fevereiro — 5 em vez de 6.
+    const proximo = new Date(ano, mes + 1, 1);
+
+    // Reservas cujo check-out caiu neste mês (e dentro da janela).
+    const doMes = ativas.filter((r) => {
+      const co = parseISO(r.checkout);
+      return (
+        co.getFullYear() === ano &&
+        co.getMonth() === mes &&
+        co >= ini &&
+        co <= fim
+      );
+    });
+
+    const porPlataforma: Record<string, number> = {};
+    for (const r of doMes) {
+      const canal = r.plataforma || 'Outra';
+      porPlataforma[canal] = (porPlataforma[canal] ?? 0) + 1;
+    }
+
+    // Noites efetivamente dentro do mês (recorta a janela escolhida).
+    const de = primeiro > ini ? primeiro : ini;
+    const ate = proximo < fim ? proximo : fim;
+    let noites = 0;
+    ativas.forEach((r) => {
+      noites += noitesNaJanela(r, de, ate);
+    });
+
+    const diasNaJanela = Math.round((ate.getTime() - de.getTime()) / DIA);
+    const custosMes = custos
+      .filter((c) => {
+        const d = parseISO(c.data);
+        return (
+          (!filtroImovel || c.propertyId === filtroImovel) &&
+          d.getFullYear() === ano &&
+          d.getMonth() === mes
+        );
+      })
+      .reduce((s, c) => s + c.valor, 0);
+
+    const receitaLiquida = doMes.reduce((s, r) => s + r.valorLiquido, 0);
+    const comissao = doMes.reduce((s, r) => s + r.taxaPlataforma, 0);
+
+    linhas.push({
+      chave: `${ano}-${String(mes + 1).padStart(2, '0')}`,
+      ano,
+      mes,
+      reservas: doMes.length,
+      porPlataforma,
+      noites,
+      estadia: doMes.length
+        ? doMes.reduce((s, r) => s + r.noites, 0) / doMes.length
+        : 0,
+      ocup:
+        diasNaJanela > 0
+          ? (noites / (numImoveis * diasNaJanela)) * 100
+          : 0,
+      receitaLiquida,
+      comissao,
+      custos: custosMes,
+      lucro: receitaLiquida - custosMes,
+    });
+
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  // Do mês mais recente para o mais antigo, escondendo meses totalmente vazios.
+  return linhas
+    .filter((l) => l.reservas > 0 || l.noites > 0 || l.custos !== 0)
+    .reverse();
 }
