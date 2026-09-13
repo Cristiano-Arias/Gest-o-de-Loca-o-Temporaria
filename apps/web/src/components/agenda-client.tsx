@@ -20,6 +20,7 @@ type Reserva = {
   hospedeTel: string;
   checkin: string;
   checkout: string;
+  noites: number;
   hospedes: number;
   status: string;
   motivo: string;
@@ -133,6 +134,26 @@ export function AgendaClient() {
     // hoje muda a cada render mas isoOf(hoje) é estável no dia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservas, filtroImovel]);
+
+  /**
+   * Lista consolidada do mês que está sendo exibido no calendário: uma linha
+   * por reserva, com entrada e saída juntas. Entra na lista toda reserva que
+   * encosta no mês (começou antes e ainda está rolando, começa e termina
+   * dentro, ou termina depois), ordenada pela data de entrada.
+   */
+  const doMes = useMemo(() => {
+    const ini = isoOf(new Date(ano, mes, 1));
+    const fim = isoOf(new Date(ano, mes + 1, 0));
+    return reservas
+      .filter(
+        (r) =>
+          r.status !== 'CANCELADA' &&
+          (!filtroImovel || r.propertyId === filtroImovel) &&
+          r.checkin <= fim &&
+          r.checkout >= ini,
+      )
+      .sort((a, b) => (a.checkin < b.checkin ? -1 : a.checkin > b.checkin ? 1 : 0));
+  }, [reservas, filtroImovel, ano, mes]);
 
   // --- eventos do calendário por dia ---
 
@@ -374,6 +395,106 @@ export function AgendaClient() {
               <Legenda cor={COR_EVENTO.block} texto="Bloqueio" />
               <Legenda cor="#e07a5f" texto="Hoje" />
             </div>
+          </div>
+
+          {/* lista consolidada do mês */}
+          <div className="mt-4 rounded-carias border border-borda bg-superficie p-5 shadow-carias">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="font-display text-lg font-semibold text-tinta">
+                Entradas e saídas de {rotuloMes}
+              </h3>
+              <span className="text-sm text-tinta-suave">
+                {doMes.length} registro(s) ·{' '}
+                {doMes.filter((r) => r.kind !== 'BLOCK').length} reserva(s)
+              </span>
+            </div>
+
+            {doMes.length === 0 ? (
+              <p className="py-3 text-sm text-tinta-suave">
+                Nenhuma reserva ou bloqueio neste mês.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead>
+                    <tr className="border-b border-borda-forte text-left text-xs uppercase tracking-wide text-tinta-suave">
+                      <th className="px-2.5 py-2 font-semibold">Check-in</th>
+                      <th className="px-2.5 py-2 font-semibold">Check-out</th>
+                      <th className="px-2.5 py-2 text-right font-semibold">Noites</th>
+                      <th className="px-2.5 py-2 font-semibold">Hóspede</th>
+                      <th className="px-2.5 py-2 text-right font-semibold">Hósp.</th>
+                      <th className="px-2.5 py-2 font-semibold">Telefone</th>
+                      <th className="px-2.5 py-2 font-semibold">Imóvel</th>
+                      <th className="px-2.5 py-2 font-semibold">Canal</th>
+                      <th className="px-2.5 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doMes.map((r) => {
+                      const bloqueio = r.kind === 'BLOCK';
+                      return (
+                        <tr
+                          key={r.id}
+                          className="border-b border-borda last:border-0"
+                        >
+                          <td className="whitespace-nowrap px-2.5 py-2 font-semibold text-tinta">
+                            {brDate(r.checkin)}
+                          </td>
+                          <td className="whitespace-nowrap px-2.5 py-2 text-tinta">
+                            {brDate(r.checkout)}
+                          </td>
+                          <td className="px-2.5 py-2 text-right text-tinta-suave">
+                            {r.noites}
+                          </td>
+                          <td className="px-2.5 py-2 text-tinta">
+                            {bloqueio ? (
+                              <em className="text-tinta-suave">
+                                Bloqueio{r.motivo ? ` — ${r.motivo}` : ''}
+                              </em>
+                            ) : (
+                              r.hospedeNome || '—'
+                            )}
+                          </td>
+                          <td className="px-2.5 py-2 text-right text-tinta-suave">
+                            {bloqueio ? '—' : r.hospedes || 1}
+                          </td>
+                          <td className="whitespace-nowrap px-2.5 py-2">
+                            {r.hospedeTel ? (
+                              <a
+                                href={`tel:${r.hospedeTel.replace(/[^0-9+]/g, '')}`}
+                                className="font-medium text-mar"
+                              >
+                                {r.hospedeTel}
+                              </a>
+                            ) : (
+                              <span className="text-tinta-suave">—</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-2 text-tinta-suave">
+                            {r.propertyNome}
+                          </td>
+                          <td className="px-2.5 py-2 text-tinta-suave">
+                            {bloqueio ? '—' : r.plataforma || '—'}
+                          </td>
+                          <td className="px-2.5 py-2 text-right">
+                            <button
+                              onClick={() => abrirReserva(r)}
+                              className="whitespace-nowrap rounded-lg border border-borda-forte px-3 py-1.5 text-xs font-medium text-tinta hover:bg-areia"
+                            >
+                              Editar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-tinta-suave">
+              Inclui toda reserva que encosta no mês — inclusive as que começaram
+              antes ou terminam depois. Canceladas ficam de fora.
+            </p>
           </div>
         </>
       )}
