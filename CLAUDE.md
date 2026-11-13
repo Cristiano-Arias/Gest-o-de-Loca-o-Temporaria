@@ -53,10 +53,8 @@ Reproduza exatamente, lendo o `pms.html` para os detalhes de cálculo e layout:
    plataformas vinculadas, custos fixos mensais, observações).
 2. **Reservas** — criar/editar/excluir reserva e bloqueio; cálculo de noites e valor líquido;
    detecção de conflito de datas; cards de **receita futura contratada por imóvel e total (ambas)**.
-3. **Importação Airbnb/Booking** — importar os relatórios padrão:
-   - Airbnb = CSV UTF-8 (um arquivo, dois imóveis pela coluna "Anúncio"); ler como texto,
-     NÃO deixar o parser converter datas (formato DD/MM/YYYY).
-   - Booking = XLS (um arquivo por imóvel; tipo de unidade identifica o imóvel; comissão 16%/13%).
+3. **Importação Airbnb/Booking** — ver a seção "Formatos dos relatórios" abaixo antes
+   de mexer em `apps/api/src/import/relatorio.parser.ts`.
    - Mapear imóvel por palavras-chave; idempotência por (plataforma, código); detectar overbooking.
    - No SaaS, fazer esse parsing **no backend** (upload do arquivo → API processa → grava).
 4. **Agenda** — calendário mensal; próximos check-ins/check-outs mostrando check-in, check-out,
@@ -72,6 +70,42 @@ Reproduza exatamente, lendo o `pms.html` para os detalhes de cálculo e layout:
    comissão paga e taxa efetiva, reservas, noites, ADR, ticket, estadia, cancelamentos; tabela + gráficos.
 9. **Regra do líquido** — Booking: líquido = preço − comissão. Airbnb: usa "Ganhos" (já líquido),
    comissão = 0, bruto = líquido. Manter esse comportamento.
+
+## Formatos dos relatórios (NÃO assumir nada aqui)
+
+Airbnb e Booking exportam **vários relatórios diferentes**, com nomes de coluna e
+formatos de data distintos, e mudam isso sem avisar. Toda vez que alguém assumiu um
+formato fixo, a importação quebrou. Regra: **descobrir dos dados, nunca fixar.**
+
+Variantes já encontradas em arquivos reais:
+
+| Plataforma | Relatório | Datas | Particularidades |
+|---|---|---|---|
+| Airbnb | Reservas (histórico) | DD/MM/AAAA | tem `Status`; `Ganhos` já é líquido; `Nome do hóspede`, `Nº de noites`, `Nº de adultos` |
+| Airbnb | Transações / pagamentos | **MM/DD/AAAA** | **não tem `Status`**; `Hóspede`, `Noites`, `Valor` (líquido), `Ganhos brutos`, `Taxa de serviço`; a mesma reserva aparece em **várias linhas** (uma por repasse) — somar; linhas `Payout` não são reserva |
+| Booking | Reservas por período | por extenso, `31 de maio, 2026` | colunas `Chegada` / **`Partida`** / **`Estado`** (OK ou Cancelada); comissão zerada nas canceladas |
+| Booking | variante antiga | `17 de maio de 2019` | colunas `Entrada` / `Saída` / `Status` |
+
+Consequências que o parser já trata e que não podem regredir:
+
+- **Formato de data é detectado, não assumido** (`detectarFormatoData`): se em alguma
+  linha o 2º número passa de 12, o arquivo é americano; se o 1º passa, é brasileiro;
+  se tudo for ambíguo, desempata pela coluna de noites. Um arquivo MM/DD lido como
+  DD/MM troca dia por mês **silenciosamente** quando ambos são ≤ 12 (12/01 vira 1º de
+  dezembro em vez de 12 de janeiro). É o pior erro possível aqui: não dá exceção.
+- **Toda data passa por `montarData`**, que remonta e compara — assim 31/09 e 29/02 de
+  ano não bissexto são recusados em vez de virar `Invalid Date` no Prisma.
+- **Nomes de coluna vêm de listas de apelidos** (`COLUNAS_AIRBNB` / `COLUNAS_BOOKING`).
+  Ao encontrar uma variante nova, **acrescente o apelido** — não troque o existente.
+- **Status é financeiro, não cosmético.** Sem ler `Estado`/`Status`, reserva cancelada
+  entra como receita. Num único relatório real isso dava R$ 84.708,24 de receita falsa
+  e um alarme falso de overbooking.
+- **Linha descartada tem que dizer por quê**, com linha e valor bruto, em `avisos`.
+  "Ignoradas: 52" sem explicação não é diagnóstico.
+
+Como testar uma mudança no parser: importe os dois relatórios reais e confira que
+nenhuma linha vira "ignorada" sem aviso, que o total de canceladas bate com o arquivo
+e que as datas conferem com o que a plataforma mostra na tela.
 
 ## Princípio de construção: incremental e testável
 
