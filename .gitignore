@@ -1,0 +1,34 @@
+# Dependências instaladas — nunca entram no repositório.
+# Sem este arquivo, um "git add -A" depois de um "pnpm install" envia
+# mais de 30 mil arquivos para o GitHub.
+node_modules/
+.pnpm-store/
+
+# Resultado de build
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
