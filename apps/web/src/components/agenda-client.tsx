@@ -76,6 +76,11 @@ function diasAte(iso: string): string {
 
 // --- componente principal ---------------------------------------------
 
+// Nomes dos meses em português, para a lista do calendário.
+const MESES = Array.from({ length: 12 }, (_, i) =>
+  new Date(2000, i, 1).toLocaleDateString('pt-BR', { month: 'long' }),
+);
+
 export function AgendaClient() {
   const router = useRouter();
   const [imoveis, setImoveis] = useState<ImovelLite[]>([]);
@@ -84,11 +89,24 @@ export function AgendaClient() {
   const [erro, setErro] = useState<string | null>(null);
   const [filtroImovel, setFiltroImovel] = useState('');
   const [filtroPlataforma, setFiltroPlataforma] = useState('');
-  const [alcance, setAlcance] = useState<'mes' | '30' | 'tudo'>('mes');
+  const [alcance, setAlcance] = useState<'mes' | '30' | 'tudo' | 'periodo'>(
+    'mes',
+  );
 
   const hoje = hojeDate();
-  const [ano, setAno] = useState(hoje.getFullYear());
+  const anoHoje = hoje.getFullYear();
+  const [ano, setAno] = useState(anoHoje);
   const [mes, setMes] = useState(hoje.getMonth()); // 0-based
+
+  // Período livre da lista de entradas e saídas. Começa em hoje → +90 dias,
+  // que é o horizonte que mais interessa para remarcar datas vagas.
+  const [de, setDe] = useState(() => isoOf(hojeDate()));
+  const [ate, setAte] = useState(() => {
+    const d = hojeDate();
+    d.setDate(d.getDate() + 90);
+    return isoOf(d);
+  });
+  const periodoInvertido = alcance === 'periodo' && !!de && !!ate && de > ate;
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -138,6 +156,11 @@ export function AgendaClient() {
       const d = new Date(hoje);
       d.setDate(d.getDate() + 30);
       fim = isoOf(d);
+    } else if (alcance === 'periodo') {
+      // Campo vazio vira "sem limite" daquele lado, para dar pra consultar
+      // "tudo a partir de 01/12" sem precisar inventar uma data final.
+      ini = de || '0000-01-01';
+      fim = ate || '9999-12-31';
     } else {
       ini = '0000-01-01';
       fim = '9999-12-31';
@@ -156,7 +179,26 @@ export function AgendaClient() {
       .sort((a, b) => (a.checkin < b.checkin ? -1 : a.checkin > b.checkin ? 1 : 0));
     // hoje é estável dentro do dia
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reservas, filtroImovel, filtroPlataforma, alcance, ano, mes]);
+  }, [reservas, filtroImovel, filtroPlataforma, alcance, ano, mes, de, ate]);
+
+  /**
+   * Anos que a lista do calendário oferece: os que têm reserva, mais o ano
+   * atual, sem buracos no meio. Assim a lista acompanha os dados em vez de
+   * ficar presa num intervalo fixo que envelhece.
+   */
+  const anosDisponiveis = useMemo(() => {
+    const anos = new Set<number>([anoHoje, ano]);
+    for (const r of reservas) {
+      const a = Number(r.checkin?.slice(0, 4));
+      const b = Number(r.checkout?.slice(0, 4));
+      if (a >= 1990 && a <= 2100) anos.add(a);
+      if (b >= 1990 && b <= 2100) anos.add(b);
+    }
+    const lista = [...anos].sort((x, y) => x - y);
+    const out: number[] = [];
+    for (let a = lista[0]; a <= lista[lista.length - 1]; a++) out.push(a);
+    return out;
+  }, [reservas, ano, anoHoje]);
 
   const plataformas = useMemo(() => {
     const set = new Set<string>();
@@ -347,9 +389,34 @@ export function AgendaClient() {
               >
                 ‹
               </button>
-              <span className="font-display text-lg font-semibold capitalize text-tinta">
-                {rotuloMes}
-              </span>
+
+              {/* Listas de mês e ano: evitam ter que clicar na seta dezenas
+                  de vezes para alcançar um mês distante. */}
+              <select
+                value={mes}
+                onChange={(e) => setMes(Number(e.target.value))}
+                aria-label="Mês"
+                className="rounded-lg border border-borda-forte bg-white px-2 py-1.5 font-display text-lg font-semibold capitalize text-tinta"
+              >
+                {MESES.map((nome, i) => (
+                  <option key={nome} value={i}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={ano}
+                onChange={(e) => setAno(Number(e.target.value))}
+                aria-label="Ano"
+                className="rounded-lg border border-borda-forte bg-white px-2 py-1.5 font-display text-lg font-semibold text-tinta"
+              >
+                {anosDisponiveis.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+
               <button
                 onClick={() => mudarMes(1)}
                 className="rounded-lg border border-borda-forte px-3 py-1.5 text-tinta hover:bg-areia"
@@ -444,6 +511,7 @@ export function AgendaClient() {
                     ['mes', rotuloMes],
                     ['30', 'Próximos 30 dias'],
                     ['tudo', 'Tudo'],
+                    ['periodo', 'Período'],
                   ] as const
                 ).map(([v, l]) => (
                   <button
@@ -461,9 +529,54 @@ export function AgendaClient() {
               </div>
             </div>
 
+            {alcance === 'periodo' ? (
+              <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-borda bg-areia/30 p-3">
+                <label className="text-xs font-medium text-tinta-suave">
+                  <span className="mb-1 block">De</span>
+                  <input
+                    type="date"
+                    value={de}
+                    onChange={(e) => setDe(e.target.value)}
+                    className="rounded-lg border border-borda-forte bg-white px-3 py-1.5 text-sm text-tinta"
+                  />
+                </label>
+                <label className="text-xs font-medium text-tinta-suave">
+                  <span className="mb-1 block">Até</span>
+                  <input
+                    type="date"
+                    value={ate}
+                    onChange={(e) => setAte(e.target.value)}
+                    className="rounded-lg border border-borda-forte bg-white px-3 py-1.5 text-sm text-tinta"
+                  />
+                </label>
+                <button
+                  onClick={() => {
+                    setDe('');
+                    setAte('');
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-mar hover:bg-areia"
+                >
+                  Limpar
+                </button>
+                {periodoInvertido ? (
+                  <p className="text-xs font-medium text-vermelho">
+                    A data inicial está depois da final.
+                  </p>
+                ) : (
+                  <p className="text-xs text-tinta-suave">
+                    Deixe um campo vazio para não limitar aquele lado.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
             {doMes.length === 0 ? (
               <p className="py-3 text-sm text-tinta-suave">
-                Nenhuma reserva ou bloqueio neste mês.
+                {periodoInvertido
+                  ? 'Ajuste as datas: a inicial está depois da final.'
+                  : alcance === 'mes'
+                    ? 'Nenhuma reserva ou bloqueio neste mês.'
+                    : 'Nenhuma reserva ou bloqueio neste período.'}
               </p>
             ) : (
               <div className="hidden overflow-x-auto md:block">
