@@ -87,7 +87,8 @@ const COLUNAS_BOOKING = {
   codigo: ['numero da reserva', 'numero de reserva', 'book number'],
   unidade: ['tipo de unidade', 'nome da propriedade', 'unit type', 'propriedade'],
   entrada: ['entrada', 'chegada', 'check-in', 'checkin', 'arrival'],
-  saida: ['saida', 'check-out', 'checkout', 'departure'],
+  // "partida" é como o relatório de Reservas do Booking chama a saída.
+  saida: ['saida', 'partida', 'check-out', 'checkout', 'departure'],
   hospede: [
     'nome(s) do(s) hospede(s)',
     'nomes dos hospedes',
@@ -97,7 +98,10 @@ const COLUNAS_BOOKING = {
     'guest name',
   ],
   telefone: ['telefone', 'phone'],
-  status: ['status'],
+  // "estado" é como o relatório de Reservas do Booking chama o status
+  // (valores "OK" / "Cancelada"). Sem este apelido, reserva cancelada
+  // entra como receita confirmada.
+  status: ['status', 'estado', 'situacao'],
   preco: ['preco', 'pagamento total', 'valor total', 'total', 'price'],
   comissao: ['valor da comissao', 'comissao', 'commission amount'],
   pessoas: ['pessoas', 'hospedes', 'guests'],
@@ -209,14 +213,43 @@ export function detectarFormatoData(
 }
 
 /**
+ * Monta AAAA-MM-DD apenas se a data existir de verdade no calendário.
+ *
+ * Checar só "mês entre 1 e 12, dia entre 1 e 31" não basta: 31/09 e 29/02 de
+ * um ano não bissexto passam nessa checagem, viram a string "2026-09-31" e só
+ * explodem lá no banco, como data inválida. Aqui a data é remontada e
+ * comparada com a original — se o calendário "corrigiu" o valor, ela não
+ * existia e devolvemos null.
+ */
+function montarData(ano: number, mes: number, dia: number): string | null {
+  if (!Number.isInteger(ano) || !Number.isInteger(mes) || !Number.isInteger(dia)) {
+    return null;
+  }
+  if (ano < 1990 || ano > 2100) return null;
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  if (
+    d.getUTCFullYear() !== ano ||
+    d.getUTCMonth() !== mes - 1 ||
+    d.getUTCDate() !== dia
+  ) {
+    return null;
+  }
+
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+/**
  * Converte a data para AAAA-MM-DD. Aceita ISO, DD/MM/AAAA, MM/DD/AAAA,
- * "17 de maio de 2019" e o número serial do Excel.
+ * "17 de maio de 2019", "31 de maio, 2026" e o número serial do Excel.
  */
 export function parseData(valor: unknown, formato: 'MDY' | 'DMY'): string | null {
   if (valor == null || valor === '') return null;
   const t = String(valor).trim();
 
-  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return montarData(Number(iso[1]), Number(iso[2]), Number(iso[3]));
 
   const m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
   if (m) {
@@ -224,27 +257,38 @@ export function parseData(valor: unknown, formato: 'MDY' | 'DMY'): string | null
     const dia = formato === 'MDY' ? Number(m[2]) : Number(m[1]);
     let ano = Number(m[3]);
     if (ano < 100) ano += ano < 70 ? 2000 : 1900;
-    if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
-    return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    return montarData(ano, mes, dia);
   }
 
   const meses: Record<string, number> = {
     janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
     julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
   };
-  const porExtenso = normalizar(t).match(/^(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})/);
+  // Duas variantes convivem nos relatórios do Booking:
+  //   "17 de maio de 2019"  (antiga)
+  //   "31 de maio, 2026"    (atual — vírgula no lugar do segundo "de")
+  const porExtenso = normalizar(t).match(
+    /^(\d{1,2})\s+de\s+([a-z]+)\s*(?:de\s+|,\s*)(\d{4})/,
+  );
   if (porExtenso) {
     const mes = meses[porExtenso[2]];
-    if (mes) {
-      return `${porExtenso[3]}-${String(mes).padStart(2, '0')}-${porExtenso[1].padStart(2, '0')}`;
-    }
+    if (mes) return montarData(Number(porExtenso[3]), mes, Number(porExtenso[1]));
   }
 
-  // Serial do Excel (dias desde 30/12/1899).
+  // Serial do Excel (dias desde 30/12/1899). A faixa aceita vai de 1990 a
+  // 2100: sem ela, um número solto que caiu na coluna errada (o nº de noites,
+  // um valor em reais) viraria uma data de 1900 sem ninguém perceber.
   if (/^\d+(\.\d+)?$/.test(t)) {
-    const dt = new Date(Date.UTC(1899, 11, 30) + parseFloat(t) * 86_400_000);
-    if (!isNaN(dt.getTime())) {
-      return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+    const serial = parseFloat(t);
+    if (serial >= 32874 && serial <= 73051) {
+      const dt = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
+      if (!isNaN(dt.getTime())) {
+        return montarData(
+          dt.getUTCFullYear(),
+          dt.getUTCMonth() + 1,
+          dt.getUTCDate(),
+        );
+      }
     }
   }
   return null;
@@ -429,12 +473,43 @@ function lerBooking(cabecalho: string[], corpo: string[][]): LeituraRelatorio {
     })),
   );
 
+  // Se uma coluna essencial não existe, toda linha vai falhar pelo mesmo
+  // motivo. Avisar uma vez, com o cabeçalho lido, poupa 52 avisos iguais e
+  // diz exatamente o que procurar no arquivo.
+  for (const [campo, rotulo] of [
+    ['entrada', 'data de entrada'],
+    ['saida', 'data de saída'],
+  ] as const) {
+    if (!existe(campo)) {
+      avisos.push(
+        `não achei a coluna de ${rotulo} neste relatório. ` +
+          `Cabeçalho lido: ${cabecalho.filter(Boolean).join(' | ')}`,
+      );
+    }
+  }
+
   const reservas: ReservaLida[] = [];
-  for (const linha of corpo) {
-    const checkin = parseData(ler(linha, 'entrada'), formatoData);
-    const checkout = parseData(ler(linha, 'saida'), formatoData);
+  for (let i = 0; i < corpo.length; i++) {
+    const linha = corpo[i];
+    const brutoEntrada = ler(linha, 'entrada');
+    const brutoSaida = ler(linha, 'saida');
+    const checkin = parseData(brutoEntrada, formatoData);
+    const checkout = parseData(brutoSaida, formatoData);
+
     if (!checkin || !checkout || noitesEntre(checkin, checkout) <= 0) {
       ignoradas++;
+      // +2 porque a linha 1 é o cabeçalho e a contagem começa em 1.
+      const onde = `linha ${i + 2}`;
+      const quem = ler(linha, 'codigo') || ler(linha, 'hospede') || onde;
+      if (!checkin) {
+        avisos.push(`${quem} (${onde}): entrada inválida ou vazia — "${brutoEntrada}".`);
+      } else if (!checkout) {
+        avisos.push(`${quem} (${onde}): saída inválida ou vazia — "${brutoSaida}".`);
+      } else {
+        avisos.push(
+          `${quem} (${onde}): saída (${checkout}) não é posterior à entrada (${checkin}).`,
+        );
+      }
       continue;
     }
     const preco = parseNumero(ler(linha, 'preco'));
@@ -459,7 +534,15 @@ function lerBooking(cabecalho: string[], corpo: string[][]): LeituraRelatorio {
     });
   }
 
-  void existe;
+  // O status do Booking não é opcional para o financeiro: sem ele, reserva
+  // cancelada entra como receita confirmada.
+  if (!existe('status') && reservas.length) {
+    avisos.push(
+      'este relatório não traz coluna de status (OK/Cancelada); ' +
+        'nenhuma reserva foi marcada como cancelada.',
+    );
+  }
+
   return { plataforma: 'Booking.com', reservas, ignoradas, formatoData, avisos };
 }
 
